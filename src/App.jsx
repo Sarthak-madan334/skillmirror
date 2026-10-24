@@ -1,20 +1,30 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BadgeCheck, BookOpen, Check, CheckCircle2,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BadgeCheck, BarChart3, BookOpen, Check, CheckCircle2,
   ChevronDown, CircleHelp, Clock3, Copy, FileVideo2, FlaskConical, FolderOpen, Gauge,
   ImagePlus, Layers3, ListChecks, Menu, MoreHorizontal, Play, Plus, RotateCcw, Save,
-  Search, Server, Settings2, ShieldCheck, Sparkles, Trash2, Upload, X,
+  Search, Server, Settings2, ShieldCheck, Sparkles, Trash2, Upload, Users, X,
 } from 'lucide-react';
 import ApiWorkspace from './ApiWorkspace.jsx';
 import { createBlankTraining, createId, createSampleSteps, EXAMPLE_ID, EXAMPLE_TRAINING } from './data.js';
 import { readStore, writeStore } from './persistence.js';
 
-const NAV_ITEMS = [
+const OWNER_NAV_ITEMS = [
   { path: '/dashboard', label: 'Overview', icon: Gauge },
-  { path: '/library', label: 'My training', icon: Layers3 },
-  { path: '/progress', label: 'Progress', icon: ListChecks },
+  { path: '/workers', label: 'Workers', icon: Users },
+  { path: '/reports', label: 'Reports', icon: BarChart3 },
+  { path: '/library', label: 'Training', icon: Layers3 },
   { path: '/api', label: 'API workspace', icon: Server },
 ];
+
+const WORKER_NAV_ITEMS = [
+  { path: '/dashboard', label: 'Overview', icon: Gauge },
+  { path: '/assignments', label: 'Assignments', icon: BookOpen },
+  { path: '/progress', label: 'Progress', icon: ListChecks },
+  { path: '/library', label: 'Library', icon: Layers3 },
+];
+
+const NAV_ITEMS = OWNER_NAV_ITEMS;
 
 function routeFromHash() {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -47,8 +57,230 @@ function PageHeading({ eyebrow, title, description, action }) {
   );
 }
 
+function FactoryOwnerDashboard() {
+  const metrics = [
+    { label: 'Total workers', value: '48', tone: 'blue', detail: 'Active in the plant', icon: Users },
+    { label: 'In progress', value: '12', tone: 'amber', detail: 'Assignments underway', icon: Clock3 },
+    { label: 'Verified competencies', value: '131', tone: 'green', detail: 'Approved skills on file', icon: BadgeCheck },
+    { label: 'Pending reviews', value: '7', tone: 'red', detail: 'Needs owner sign-off', icon: ShieldCheck },
+  ];
+  const activity = [
+    { title: 'Alicia Grant started the CNC safety module', time: '12 minutes ago', tone: 'info' },
+    { title: 'Equipment calibration training was marked for review', time: '1 hour ago', tone: 'warn' },
+    { title: 'Mason Lee completed the line changeover assessment', time: 'Today', tone: 'success' },
+  ];
+  const attention = [
+    'Two workers still need their PPE induction sign-out.',
+    'Three practical checkpoints were submitted and waiting for review.',
+    'One maintenance assignment is due tomorrow.',
+  ];
+
+  return (
+    <div className="factory-shell">
+      <PageHeading
+        eyebrow="FACTORY OVERVIEW"
+        title="Operational training at a glance."
+        description="Monitor progress, verify demonstrated skills, and keep the workforce aligned to current procedures."
+        action={<Button icon={Plus}>Assign training</Button>}
+      />
+
+      <div className="factory-topbar card-panel">
+        <div>
+          <span className="eyebrow">Northline Manufacturing</span>
+          <h2>Production readiness overview</h2>
+        </div>
+        <div className="factory-actions">
+          <button className="outline-button">Add worker</button>
+          <Button icon={Plus}>Assign training</Button>
+        </div>
+      </div>
+
+      <div className="metric-grid">
+        {metrics.map(({ label, value, tone, detail, icon: Icon }) => (
+          <div key={label} className={`metric-card ${tone}`}>
+            <div className="metric-icon-wrap">
+              <Icon size={18} />
+            </div>
+            <div>
+              <span>{label}</span>
+              <strong>{value}</strong>
+              <small>{detail}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="factory-grid">
+        <section className="card-panel">
+          <div className="panel-title-row">
+            <div>
+              <span className="eyebrow">RECENT ACTIVITY</span>
+              <h3>Recent updates</h3>
+            </div>
+          </div>
+          <ul className="activity-list">
+            {activity.map((item) => (
+              <li key={item.title} className={`activity-item ${item.tone}`}>
+                <span className="dot" />
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.time}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="card-panel">
+          <div className="panel-title-row">
+            <div>
+              <span className="eyebrow">ATTENTION REQUIRED</span>
+              <h3>Priority follow-ups</h3>
+            </div>
+          </div>
+          <ul className="attention-list">
+            {attention.map((item) => (
+              <li key={item}><ShieldCheck size={14} /> {item}</li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function WorkersPage() {
+  const workers = [
+    { name: 'Alicia Grant', employeeId: 'NW-2148', department: 'CNC', training: 'Safety induction', status: 'In progress', competence: '3 of 5 checks', review: '2 pending', lastActivity: '2 hours ago' },
+    { name: 'Mason Lee', employeeId: 'NW-1037', department: 'Assembly', training: 'Line changeover', status: 'Ready to review', competence: '5 of 5 checks', review: '1 pending', lastActivity: 'Today' },
+    { name: 'Rosa Patel', employeeId: 'NW-4411', department: 'Quality', training: 'Inspection standard', status: 'Verified', competence: 'Verified', review: 'None', lastActivity: 'Yesterday' },
+  ];
+
+  return (
+    <div>
+      <PageHeading
+        eyebrow="WORKER MANAGEMENT"
+        title="Factory workforce overview."
+        description="Search workers, review active assignments, and monitor the training path that leads to verified competence."
+        action={<Button icon={Plus}>Add worker</Button>}
+      />
+
+      <div className="card-panel table-panel">
+        <div className="panel-title-row flush">
+          <div>
+            <span className="eyebrow">WORKERS</span>
+            <h3>Active team</h3>
+          </div>
+          <div className="toolbar-actions">
+            <button className="outline-button">Filter</button>
+            <button className="outline-button">Search</button>
+          </div>
+        </div>
+
+        <table className="worker-table">
+          <thead>
+            <tr>
+              <th>Worker</th>
+              <th>Employee ID</th>
+              <th>Department</th>
+              <th>Assigned training</th>
+              <th>Competence</th>
+              <th>Pending review</th>
+              <th>Last activity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {workers.map((worker) => (
+              <tr key={worker.employeeId}>
+                <td>{worker.name}</td>
+                <td>{worker.employeeId}</td>
+                <td>{worker.department}</td>
+                <td>{worker.training}</td>
+                <td><span className="mini-pill success">{worker.competence}</span></td>
+                <td><span className="mini-pill warn">{worker.review}</span></td>
+                <td>{worker.lastActivity}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function FactoryReportsPage() {
+  const summary = [
+    { label: 'Completed assignments', value: '62%', detail: '18 of 29', tone: 'green' },
+    { label: 'Verified competencies', value: '80%', detail: '24 of 30', tone: 'blue' },
+    { label: 'Overdue tasks', value: '4', detail: 'Requires follow-up', tone: 'amber' },
+  ];
+
+  return (
+    <div>
+      <PageHeading
+        eyebrow="REPORTS"
+        title="Factory performance and training health."
+        description="Keep the review focused on completed assignments, verified skills, and overdue operator readiness checks."
+        action={<Button icon={BarChart3}>Export CSV</Button>}
+      />
+
+      <div className="metric-grid">
+        {summary.map(({ label, value, detail, tone }) => (
+          <div key={label} className={`metric-card ${tone}`}>
+            <div className="metric-icon-wrap"><BarChart3 size={18} /></div>
+            <div>
+              <span>{label}</span>
+              <strong>{value}</strong>
+              <small>{detail}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WorkerPortal() {
+  const assignments = [
+    { title: 'CNC Safety Induction', status: 'In progress', due: 'Due in 3 days', actions: 'Continue' },
+    { title: 'Line Changeover Basics', status: 'Needs review', due: 'Evidence submitted', actions: 'Review' },
+    { title: 'Inspection Standard', status: 'Ready', due: 'Due in 6 days', actions: 'Start' },
+  ];
+
+  return (
+    <div>
+      <PageHeading
+        eyebrow="WORKER PORTAL"
+        title="Your assigned training."
+        description="Complete the required steps, submit evidence, and keep your practical skill records current."
+      />
+
+      <div className="worker-portal-grid">
+        {assignments.map((assignment) => (
+          <div key={assignment.title} className="card-panel assignment-card">
+            <div className="panel-title-row compact">
+              <div>
+                <span className="eyebrow">ASSIGNMENT</span>
+                <h3>{assignment.title}</h3>
+              </div>
+              <span className="mini-pill neutral">{assignment.status}</span>
+            </div>
+            <p>{assignment.due}</p>
+            <button className="outline-button full">{assignment.actions}</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WorkerAssignmentsPage() {
+  return <WorkerPortal />;
+}
+
 function App() {
   const [route, setRoute] = useState(routeFromHash);
+  const [role, setRole] = useState('owner');
   const [store, setStore] = useState(() => readStore().data);
   const [recoveredData, setRecoveredData] = useState(() => readStore().recovered);
   const [storageError, setStorageError] = useState(false);
@@ -77,6 +309,8 @@ function App() {
     return store.projects.find((project) => project.id === route.id) ?? null;
   }, [route.id, store.projects]);
 
+  const navItems = role === 'owner' ? OWNER_NAV_ITEMS : WORKER_NAV_ITEMS;
+
   const saveProject = (project) => {
     setStore((current) => ({
       ...current,
@@ -87,6 +321,10 @@ function App() {
   const showToast = (message) => setToast(message);
 
   const renderScreen = () => {
+    if (route.view === 'workers') return <WorkersPage />;
+    if (route.view === 'reports') return <FactoryReportsPage />;
+    if (route.view === 'assignments') return <WorkerAssignmentsPage />;
+    if (route.view === 'dashboard') return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
     if (route.view === 'create') {
       const project = route.id ? store.projects.find((item) => item.id === route.id) : null;
       return <Builder key={route.id || 'new'} initialProject={project} onSave={saveProject} onToast={showToast} />;
@@ -103,7 +341,7 @@ function App() {
     if (route.view === 'library') return <Library projects={store.projects} />;
     if (route.view === 'progress') return <Progress projects={store.projects} sessions={store.sessions} />;
     if (route.view === 'api') return <ApiWorkspace />;
-    return <Dashboard projects={store.projects} sessions={store.sessions} />;
+    return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
   };
 
   const focused = ['learn', 'report'].includes(route.view);
@@ -115,11 +353,15 @@ function App() {
         <button className="sidebar-close icon-button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}><X size={19} /></button>
         <a className="brand" href="#/dashboard" aria-label="SkillMirror AI overview">
           <span className="brand-mark"><span /><span /><span /></span>
-          <span className="brand-copy"><strong>skillmirror</strong><small>AI learning studio</small></span>
+          <span className="brand-copy"><strong>SkillMirror AI</strong><small>{role === 'owner' ? 'Factory operations' : 'Worker learning'}</small></span>
         </a>
         <div className="workspace-label">WORKSPACE</div>
+        <div className="role-switch" aria-label="Workspace role switch">
+          <button className={role === 'owner' ? 'active' : ''} onClick={() => setRole('owner')}>Owner</button>
+          <button className={role === 'worker' ? 'active' : ''} onClick={() => setRole('worker')}>Worker</button>
+        </div>
         <nav className="primary-nav" aria-label="Main navigation">
-          {NAV_ITEMS.map(({ path, label, icon: Icon }) => (
+          {navItems.map(({ path, label, icon: Icon }) => (
             <a key={path} href={`#${path}`} className={`nav-link ${route.view === path.slice(1) ? 'nav-link-active' : ''}`}>
               <Icon size={18} strokeWidth={1.8} aria-hidden="true" /><span>{label}</span>
               {path === '/library' && store.projects.length > 0 && <span className="nav-count">{store.projects.length}</span>}
@@ -129,12 +371,12 @@ function App() {
         <div className="sidebar-spacer" />
         <div className="sidebar-note">
           <div className="sidebar-note-icon"><ShieldCheck size={18} /></div>
-          <strong>Practice, not proof</strong>
-          <p>Checkpoint feedback in this prototype is self-reported, not AI verified.</p>
+          <strong>{role === 'owner' ? 'Owner-only controls' : 'Practice-first workflow'}</strong>
+          <p>{role === 'owner' ? 'Review assigned training, evidence, and competency approvals.' : 'Stay focused on the current assignment and required checks.'}</p>
         </div>
         <div className="profile-row">
-          <div className="avatar">SM</div>
-          <div className="profile-copy"><strong>My workspace</strong><small>Local prototype</small></div>
+          <div className="avatar">{role === 'owner' ? 'FO' : 'WL'}</div>
+          <div className="profile-copy"><strong>{role === 'owner' ? 'Factory owner' : 'Worker profile'}</strong><small>{role === 'owner' ? 'Northline Manufacturing' : 'Ready for learning'}</small></div>
           <Settings2 size={17} aria-hidden="true" />
         </div>
       </aside>
@@ -145,7 +387,7 @@ function App() {
           <button className="mobile-menu icon-button" aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileNavOpen} aria-controls="main-sidebar" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
             {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
-          <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{NAV_ITEMS.find((item) => item.path === `/${route.view}`)?.label ?? (route.view === 'create' ? 'Create training' : 'Training details')}</strong></div>
+          <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{navItems.find((item) => item.path === `/${route.view}`)?.label ?? (route.view === 'create' ? 'Create training' : 'Overview')}</strong></div>
           <div className="topbar-actions"><button className="top-search" aria-label="Search training" onClick={() => navigate('/library')}><Search size={17} /><span>Find training</span><kbd>/</kbd></button>{route.view !== 'api' && <Button icon={Plus} onClick={() => navigate('/create')}>Create training</Button>}</div>
         </header>
         <main className="content-area">
@@ -156,7 +398,7 @@ function App() {
       </div>
       {toast && <div className="toast" role="status">{toast}</div>}
       <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
-        {NAV_ITEMS.map(({ path, label, icon: Icon }) => <a key={path} href={`#${path}`} className={route.view === path.slice(1) ? 'mobile-nav-active' : ''}><Icon size={19} /><span>{label}</span></a>)}
+        {navItems.map(({ path, label, icon: Icon }) => <a key={path} href={`#${path}`} className={route.view === path.slice(1) ? 'mobile-nav-active' : ''}><Icon size={19} /><span>{label}</span></a>)}
       </nav>
     </div>
   );
