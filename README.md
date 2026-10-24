@@ -61,7 +61,7 @@ npm run db:migrate
 npm run dev:backend
 ```
 
-The API listens on `http://localhost:8000`. `GET /api/v1/health` is liveness; `GET /api/v1/ready` checks PostgreSQL.
+The API listens on `http://localhost:8000`. `GET /api/v1/health` is liveness; `GET /api/v1/ready` checks PostgreSQL connectivity and confirms all required database migrations are applied.
 
 In a second terminal, optionally copy `.env.example` to `.env` and set `VITE_API_BASE_URL`; then run:
 

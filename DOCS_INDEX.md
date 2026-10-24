@@ -13,7 +13,7 @@
 ## Remaining
 
 - Add CI for frontend, backend, and Prisma schema checks.
-- Run the full create/publish/session/upload/review/report and user-isolation integration checks against PostgreSQL (the initial migration and health/readiness checks pass in the local Docker setup).
+- Apply both committed migrations to Neon and verify `/api/v1/ready` returns 200; then run the full create/publish/session/upload/review/report and user-isolation integration checks against PostgreSQL.
 - Add private durable object storage and malware scanning before production uploads.
 - Add real AI/verification providers only with validated schemas, provenance, and evaluated datasets.
 - Choose a project license before external distribution.

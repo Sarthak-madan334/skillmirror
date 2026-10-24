@@ -13,6 +13,13 @@ import { createFactoryRouter } from './routes/factory.routes.js';
 import { LocalMediaStorage } from './storage/localMediaStorage.js';
 import { sendData } from './utils/response.js';
 
+// Keep this in sync with backend/prisma/migrations. Readiness must fail closed
+// when a release is running against a database that has not reached its schema.
+const REQUIRED_MIGRATIONS = [
+  '20261024140000_initial',
+  '20261024160000_factory_workforce',
+] as const;
+
 export type AppDependencies = {
   prisma?: PrismaClient;
   config?: AppConfig;
@@ -58,6 +65,25 @@ export function createApp(dependencies: AppDependencies = {}) {
   api.get('/health', (_request, response) => sendData(response, { status: 'ok' }));
   api.get('/ready', async (_request, response) => {
     await database.$queryRaw`SELECT 1`;
+
+    const [migrationTable] = await database.$queryRaw<Array<{ present: boolean }>>`
+      SELECT to_regclass('"public"."_prisma_migrations"') IS NOT NULL AS present
+    `;
+    if (!migrationTable?.present) {
+      throw new HttpError(503, 'DATABASE_SCHEMA_NOT_READY', 'Database migrations have not been applied.');
+    }
+
+    const appliedRows = await database.$queryRaw<Array<{ migration_name: string }>>`
+      SELECT "migration_name"
+      FROM "public"."_prisma_migrations"
+      WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
+    `;
+    const appliedMigrations = new Set(appliedRows.map(({ migration_name }) => migration_name));
+    const missingMigrations = REQUIRED_MIGRATIONS.filter((name) => !appliedMigrations.has(name));
+    if (missingMigrations.length > 0) {
+      throw new HttpError(503, 'DATABASE_SCHEMA_NOT_READY', 'Database migrations have not been applied.', { missingMigrations });
+    }
+
     sendData(response, { status: 'ready' });
   });
   api.use('/auth', createAuthRouter(database, config));

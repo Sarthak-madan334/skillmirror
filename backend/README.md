@@ -27,7 +27,7 @@ npm run db:migrate
 npm run dev:backend
 ```
 
-The API listens on `http://localhost:8000`. `GET /api/v1/health` is a liveness check; `GET /api/v1/ready` checks database connectivity.
+The API listens on `http://localhost:8000`. `GET /api/v1/health` is a liveness check; `GET /api/v1/ready` checks database connectivity and required migration status.
 
 To seed fictional development data, set `DEV_SEED_EMAIL` and a unique `DEV_SEED_PASSWORD` of at least 12 characters in the environment, then run `npm run db:seed`. The seed creates no default production account and never prints the supplied password. It is intended only for a development database.
 

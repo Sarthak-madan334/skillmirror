@@ -12,7 +12,7 @@ The implemented REST API is versioned under `/api/v1`. The canonical endpoint, r
 
 ## Endpoint groups
 
-- Health: `GET /health`, `GET /ready`
+- Health: `GET /health`, `GET /ready`. Readiness requires PostgreSQL connectivity and all migration IDs shipped with the current release; it returns `503 DATABASE_SCHEMA_NOT_READY` if migrations are absent or incomplete.
 - Auth: `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
 - Training: list/create/read/update/delete, `PUT /trainings/{id}/procedure`, `GET /trainings/{id}/progress`, sample step generation, and step CRUD/reorder
 - Learning: session create/read/progress/complete, attempts, owner review, and reports

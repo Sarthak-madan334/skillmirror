@@ -29,9 +29,14 @@ paths:
   /ready:
     get:
       tags: [Health]
-      summary: Database readiness probe
+      summary: Database and schema readiness probe
       responses:
-        '200': { description: Database query succeeded }
+        '200': { description: Database is reachable and all required migrations are applied }
+        '503':
+          description: Database migrations are missing or incomplete
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '500': { $ref: '#/components/responses/ServerError' }
   /auth/register:
     post:

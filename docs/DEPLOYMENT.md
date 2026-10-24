@@ -26,10 +26,10 @@ This repository can use Vercel for the Vite frontend and Render for the Express 
 ### Render API and database
 
 1. Create a managed Render PostgreSQL database and a Node.js web service connected to this repository.
-2. Use the repository root as the service root. Set the build command to `npm ci && npm run db:generate && npm run build:backend` and the start command to `npm run start:backend`.
-3. Configure server-side environment variables: `DATABASE_URL` from Render PostgreSQL, `NODE_ENV=production`, `FRONTEND_ORIGIN` set to the exact public frontend origin, and `MEDIA_STORAGE_DIR` if using local disk. Render supplies `PORT`; do not hard-code it.
-4. Run `npm run db:deploy` as a release migration step before the new API version serves traffic. Use Render's pre-deploy command when available, or run the migration as a deliberate one-off release operation. Avoid running schema migrations concurrently from multiple service instances.
-5. Set the Render health-check path to `/api/v1/health`; also check `/api/v1/ready` after deployment to confirm database connectivity.
+2. Use the repository root as the service root. For a free web service, set the build command to `npm ci --include=dev && npm run db:generate && npm run db:deploy && npm run build:backend` and the start command to `npm run start:backend`. This applies database migrations using the service's `DATABASE_URL` before the new build starts.
+3. Configure server-side environment variables: `DATABASE_URL` for the intended PostgreSQL database and branch, `NODE_ENV=production`, and `FRONTEND_ORIGIN` set to the exact public frontend origin. Render supplies `PORT`; do not hard-code it.
+4. On a paid service with a pre-deploy command, use `npm run db:deploy` there and remove it from the build command. Configure the migration in one place only; avoid running migrations concurrently from multiple service instances.
+5. Set the Render health-check path to `/api/v1/health`; check `/api/v1/ready` after deployment to confirm database connectivity and that every required migration has completed.
 
 ### Cookie and domain requirement
 
@@ -50,7 +50,7 @@ Free plans can be useful for a demo, but are not a durable production setup. Ren
 ## Backend
 
 1. Configure `DATABASE_URL`, `PORT`, `NODE_ENV`, `FRONTEND_ORIGIN`, and `MEDIA_STORAGE_DIR` using the host's server-side environment/secret manager. See `backend/.env.example`.
-2. Run `npm run db:generate` and `npm run db:deploy` as a release migration step.
+2. Run `npm run db:generate` and `npm run db:deploy` as a release migration step. The current required migrations are `20261024140000_initial` and `20261024160000_factory_workforce`.
 3. Start with `npm run build:backend` followed by `npm run start:backend`.
 4. Use HTTPS so production cookies can be `Secure`; set `FRONTEND_ORIGIN` to the exact frontend origin.
 5. Monitor `/api/v1/health` for liveness and `/api/v1/ready` for database readiness.
