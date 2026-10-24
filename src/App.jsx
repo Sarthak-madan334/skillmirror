@@ -375,10 +375,10 @@ function App() {
   if (focused) return <main className="focused-shell">{renderScreen()}{toast && <div className="toast" role="status">{toast}</div>}</main>;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell pramaan-app-shell">
       <aside id="main-sidebar" className={`sidebar ${mobileNavOpen ? 'sidebar-open' : ''}`}>
         <button className="sidebar-close icon-button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}><X size={19} /></button>
-        <a className="brand" href="#/dashboard" aria-label="SkillMirror AI overview">
+        <a className="brand" href="#/landing" aria-label="SkillMirror AI landing page" onClick={(event) => { event.preventDefault(); navigate('/landing'); }}>
           <span className="brand-mark"><span /><span /><span /></span>
           <span className="brand-copy"><strong>SkillMirror AI</strong><small>{role === 'owner' ? 'Factory operations' : 'Worker learning'}</small></span>
         </a>
