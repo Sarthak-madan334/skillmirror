@@ -11,7 +11,7 @@ import { createMediaRouter } from './routes/media.routes.js';
 import { createTrainingRouter } from './routes/training.routes.js';
 import { createFactoryRouter } from './routes/factory.routes.js';
 import { LocalMediaStorage } from './storage/localMediaStorage.js';
-import { OpenAiResponsesProvider, type AiProvider } from './services/aiProvider.js';
+import { GroqChatCompletionsProvider, type AiProvider } from './services/aiProvider.js';
 import { sendData } from './utils/response.js';
 
 // Keep this in sync with backend/prisma/migrations. Readiness must fail closed
@@ -33,7 +33,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   const config = dependencies.config ?? loadConfig();
   const database = dependencies.prisma ?? createPrismaClient(config.databaseUrl);
   const storage = dependencies.storage ?? new LocalMediaStorage(config.mediaStorageDir);
-  const aiProvider = dependencies.aiProvider ?? (config.openAiApiKey ? new OpenAiResponsesProvider(config.openAiApiKey, config.openAiModel) : undefined);
+  const aiProvider = dependencies.aiProvider ?? (config.groqApiKey ? new GroqChatCompletionsProvider(config.groqApiKey, config.groqModel) : undefined);
   const app = express();
 
   app.disable('x-powered-by');

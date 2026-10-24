@@ -4,7 +4,7 @@
 
 SkillMirror is a hackathon prototype with a React/Vite frontend and a Node.js, TypeScript, Express, PostgreSQL, and Prisma backend.
 
-> **Status:** A browser-only workspace and a separate API-backed workspace are available. The API implements authentication, training and steps, sessions, private local uploads, optional AI-assisted draft generation and still-image suggestions, human review, and reports. AI features require a server-side OpenAI API key; AI suggestions never decide or pass an assessment.
+> **Status:** A browser-only workspace and a separate API-backed workspace are available. The API implements authentication, training and steps, sessions, private local uploads, optional AI-assisted draft generation and still-image suggestions, human review, and reports. AI features require a server-side Groq API key; AI suggestions never decide or pass an assessment.
 
 ## Product
 
@@ -18,7 +18,7 @@ Open **API workspace** in the app navigation to register or sign in and use serv
 
 Evidence submissions with attached files enter `NEEDS_REVIEW`; submissions without evidence become `UNABLE_TO_VERIFY`. Only the project owner can review an attempt. Completion requires a human-reviewed `PASSED` result for the latest attempt on every step. Submitting evidence never passes a step automatically.
 
-Guide authors can use an optional OpenAI-backed draft generator or the deterministic paper-bridge sample template. AI-generated procedures are marked with provider/model provenance, remain drafts, and require instructor review. Learners may explicitly opt in to send still-image evidence or up to four browser-sampled frames from a short video to the configured OpenAI model for a non-decisive suggestion. The recorded attempt remains `NEEDS_REVIEW` until a human owner reviews it. The full video is not sent to the provider. These capabilities are prototypes and have not been validated for real-world assessment.
+Guide authors can use an optional Groq-backed draft generator or the deterministic paper-bridge sample template. AI-generated procedures are marked with provider/model provenance, remain drafts, and require instructor review. Learners may explicitly opt in to send still-image evidence or up to three browser-sampled frames from a short video to the configured Groq model for a non-decisive suggestion. The recorded attempt remains `NEEDS_REVIEW` until a human owner reviews it. The full video is not sent to the provider. These capabilities are prototypes and have not been validated for real-world assessment.
 
 ## Architecture
 
@@ -47,7 +47,7 @@ Install packages from the repository root:
 npm install
 ```
 
-Create backend configuration from the example and set `DATABASE_URL`. Set `FRONTEND_ORIGIN` to the exact browser origin. To enable AI draft generation and image suggestions, set `OPENAI_API_KEY` on the backend only; optionally set `OPENAI_MODEL` (defaults to `gpt-5.4-mini`). Leave the key unset to disable AI features while keeping manual workflows available.
+Create backend configuration from the example and set `DATABASE_URL`. Set `FRONTEND_ORIGIN` to the exact browser origin. To enable AI draft generation and image suggestions, set `GROQ_API_KEY` on the backend only; optionally set `GROQ_MODEL` (defaults to `qwen/qwen3.8-27b`). Leave the key unset to disable AI features while keeping manual workflows available.
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
@@ -102,7 +102,7 @@ See [backend/openapi.yaml](backend/openapi.yaml) for request and response detail
 - Passwords are bcrypt-hashed. Registration and login are rate-limited; registration responses do not reveal whether an email already exists.
 - Media uses server-generated keys, an allowlist, content sniffing, and a 250 MiB limit. Local disk is not durable on ephemeral hosts, and malware scanning is not included.
 - Training with session history cannot be edited or deleted; archive it or duplicate it instead.
-- AI features need an `OPENAI_API_KEY` on the backend. Image/video-frame suggestions are optional and human-reviewed; evaluation datasets and accuracy validation remain future work.
+- AI features need a `GROQ_API_KEY` on the backend. Image/video-frame suggestions are optional and human-reviewed; evaluation datasets and accuracy validation remain future work.
 - This prototype is not a safety certification system. Start with low-risk tasks and obtain qualified human review for physical procedures.
 - No database server is bundled. Migration application and live database integration require a PostgreSQL instance and credentials.
 

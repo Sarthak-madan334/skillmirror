@@ -170,7 +170,7 @@ paths:
               properties:
                 mode: { type: string, enum: [demo, ai] }
       responses:
-        '200': { description: Draft steps with provenance, simulation, approval, and human-review metadata; AI mode requires OPENAI_API_KEY }
+        '200': { description: Draft steps with provenance, simulation, approval, and human-review metadata; AI mode requires GROQ_API_KEY }
         '422': { description: Demo template only supports the paper bridge task }
         '503': { description: AI provider is not configured }
   /trainings/{trainingId}/progress:
@@ -311,8 +311,8 @@ paths:
               type: object
               properties:
                 evidenceIds: { type: array, maxItems: 5, items: { type: string } }
-                analyzeWithAi: { type: boolean, default: false, description: Explicitly opt in to send attached still images to the configured OpenAI model; the human review status is unchanged }
-                analysisEvidenceIds: { type: array, maxItems: 4, items: { type: string }, description: Evidence IDs used for AI analysis; for video these are browser-sampled JPEG frames also included in evidenceIds }
+                analyzeWithAi: { type: boolean, default: false, description: Explicitly opt in to send attached still images to the configured Groq model; the human review status is unchanged }
+                analysisEvidenceIds: { type: array, maxItems: 3, items: { type: string }, description: Evidence IDs used for AI analysis; for video these are browser-sampled JPEG frames also included in evidenceIds }
       responses:
         '201': { description: Needs review with owned evidence, optionally with an advisory AI suggestion, otherwise unable to verify; never auto-passed }
         '400': { description: Invalid evidence references }

@@ -49,7 +49,7 @@ Free plans can be useful for a demo, but are not a durable production setup. Ren
 
 ## Backend
 
-1. Configure `DATABASE_URL`, `PORT`, `NODE_ENV`, `FRONTEND_ORIGIN`, and `MEDIA_STORAGE_DIR` using the host's server-side environment/secret manager. To enable AI features, also configure `OPENAI_API_KEY` and optionally `OPENAI_MODEL` (default `gpt-5.4-mini`). Keep the key on the API service only; never add it to Vercel or any `VITE_*` variable. See `backend/.env.example`.
+1. Configure `DATABASE_URL`, `PORT`, `NODE_ENV`, `FRONTEND_ORIGIN`, and `MEDIA_STORAGE_DIR` using the host's server-side environment/secret manager. To enable AI features, also configure `GROQ_API_KEY` and optionally `GROQ_MODEL` (default `qwen/qwen3.8-27b`). Keep the key on the API service only; never add it to Vercel or any `VITE_*` variable. See `backend/.env.example`.
 2. Run `npm run db:generate` and `npm run db:deploy` as a release migration step. The current required migrations are `20261024140000_initial`, `20261024160000_factory_workforce`, and `20261024180000_ai_assessment_provenance`.
 3. Start with `npm run build:backend` followed by `npm run start:backend`.
 4. Use HTTPS so production cookies can be `Secure`; set `FRONTEND_ORIGIN` to the exact frontend origin.
@@ -59,7 +59,7 @@ Free plans can be useful for a demo, but are not a durable production setup. Ren
 
 - Local media storage is not durable on ephemeral hosts, has no malware scanner, and has no retention/deletion scheduler. Implement a private object-storage adapter and cleanup policy before accepting production uploads.
 - Registration and login have in-process rate limits; production should use shared rate limiting behind the trusted proxy and abuse monitoring.
-- AI generation and image/video-frame suggestions require an OpenAI API key, usage budget, and current provider data-policy review. Suggestions remain human-reviewed. Representative evaluation data and model accuracy measurements remain unimplemented.
+- AI generation and image/video-frame suggestions require a Groq API key, usage budget, and current provider data-policy review. Suggestions remain human-reviewed. Representative evaluation data and model accuracy measurements remain unimplemented.
 - Add database backups, restore drills, TLS, metrics, alerting, and operational incident procedures.
 - Review privacy/consent, retention, account deletion, and safety requirements with qualified stakeholders.
 - The Vercel/Render split deployment needs same-site custom domains for the current `SameSite=Lax` session cookie; verify login, logout, and authenticated API calls in the target browsers.

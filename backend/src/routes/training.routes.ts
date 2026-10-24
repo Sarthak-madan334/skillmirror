@@ -78,9 +78,9 @@ export function createTrainingRouter(prisma: PrismaClient, storage: LocalMediaSt
     const project = await findOwnedTraining(prisma, trainingId, user.id);
     const input = generationSchema.parse(request.body);
     if (input.mode === 'ai') {
-      if (!aiProvider) throw new HttpError(503, 'AI_NOT_CONFIGURED', 'AI guide generation is not configured. Add OPENAI_API_KEY to the backend environment.');
+      if (!aiProvider) throw new HttpError(503, 'AI_NOT_CONFIGURED', 'AI guide generation is not configured. Add GROQ_API_KEY to the backend environment.');
       const steps = await aiProvider.generateSteps({ title: project.title, description: project.description });
-      sendData(response, { steps, provenance: 'openai-responses', model: aiProvider.model, simulated: false, approved: false, humanReviewRequired: true });
+      sendData(response, { steps, provenance: aiProvider.provider, model: aiProvider.model, simulated: false, approved: false, humanReviewRequired: true });
       return;
     }
     const draft = await stepGenerator.generate({ title: project.title, description: project.description, mode: input.mode });

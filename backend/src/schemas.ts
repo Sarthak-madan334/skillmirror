@@ -62,7 +62,7 @@ export const sessionProgressSchema = z.object({
 
 export const submitAttemptSchema = z.object({
   evidenceIds: z.array(idSchema).max(5).default([]),
-  analysisEvidenceIds: z.array(idSchema).max(4).default([]),
+  analysisEvidenceIds: z.array(idSchema).max(3).default([]),
   analyzeWithAi: z.boolean().default(false),
 }).superRefine((input, context) => {
   if (input.analysisEvidenceIds.some((id) => !input.evidenceIds.includes(id))) context.addIssue({ code: 'custom', path: ['analysisEvidenceIds'], message: 'AI analysis files must also be attached as evidence.' });
