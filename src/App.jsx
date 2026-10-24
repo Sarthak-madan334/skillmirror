@@ -322,10 +322,14 @@ function App() {
 
   const renderScreen = () => {
     if (route.view === 'landing') return <LandingPage />;
-    if (route.view === 'workers') return <WorkersPage />;
-    if (route.view === 'reports') return <FactoryReportsPage />;
-    if (route.view === 'assignments') return <WorkerAssignmentsPage />;
-    if (route.view === 'dashboard') return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
+    // Keep the working prototype visible until the API confirms an authenticated
+    // identity. An unavailable or misconfigured API must not blank the main UI.
+    if (route.view === 'workers') return identity ? <LiveWorkersPage /> : <WorkersPage />;
+    if (route.view === 'reports') return identity ? <LiveReportsPage /> : <FactoryReportsPage />;
+    if (route.view === 'assignments') return identity ? <LiveWorkerPortal onIdentityChange={updateIdentity} /> : <WorkerAssignmentsPage />;
+    if (route.view === 'dashboard') return role === 'owner'
+      ? (identity ? <LiveOwnerDashboard /> : <FactoryOwnerDashboard />)
+      : (identity ? <LiveWorkerPortal onIdentityChange={updateIdentity} /> : <WorkerPortal />);
     if (route.view === 'create') {
       const project = route.id ? store.projects.find((item) => item.id === route.id) : null;
       return <Builder key={route.id || 'new'} initialProject={project} onSave={saveProject} onToast={showToast} />;
@@ -341,8 +345,10 @@ function App() {
     }
     if (route.view === 'library') return <Library projects={store.projects} />;
     if (route.view === 'progress') return <Progress projects={store.projects} sessions={store.sessions} />;
-    if (route.view === 'api') return <ApiWorkspace />;
-    return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
+    if (route.view === 'api') return <ApiWorkspace initialSessionId={route.id} onIdentityChange={updateIdentity} />;
+    return role === 'owner'
+      ? (identity ? <LiveOwnerDashboard /> : <FactoryOwnerDashboard />)
+      : (identity ? <LiveWorkerPortal onIdentityChange={updateIdentity} /> : <WorkerPortal />);
   };
 
   if (route.view === 'landing') return <LandingPage />;
