@@ -10,6 +10,7 @@ import { FactoryOwnerDashboard as LiveOwnerDashboard, WorkersPage as LiveWorkers
 import { createBlankTraining, createId, createSampleSteps, EXAMPLE_ID, EXAMPLE_TRAINING } from './data.js';
 import { readStore, writeStore } from './persistence.js';
 import { skillMirrorApi } from './apiClient.js';
+import LandingPage from './LandingPage.jsx';
 
 const OWNER_NAV_ITEMS = [
   { path: '/dashboard', label: 'Overview', icon: Gauge },
@@ -293,7 +294,7 @@ function App() {
   useEffect(() => {
     const updateRoute = () => { setRoute(routeFromHash()); setMobileNavOpen(false); };
     window.addEventListener('hashchange', updateRoute);
-    if (!window.location.hash) navigate('/dashboard');
+    if (!window.location.hash) navigate('/landing');
     return () => window.removeEventListener('hashchange', updateRoute);
   }, []);
 
@@ -338,6 +339,7 @@ function App() {
   const showToast = (message) => setToast(message);
 
   const renderScreen = () => {
+    if (route.view === 'landing') return <LandingPage onNavigate={navigate} />;
     // Keep the working prototype visible until the API confirms an authenticated
     // identity. An unavailable or misconfigured API must not blank the main UI.
     if (route.view === 'workers') return identity ? <LiveWorkersPage /> : <WorkersPage />;
@@ -367,14 +369,16 @@ function App() {
       : (identity ? <LiveWorkerPortal onIdentityChange={updateIdentity} /> : <WorkerPortal />);
   };
 
+  if (route.view === 'landing') return <LandingPage onNavigate={navigate} />;
+
   const focused = ['learn', 'report'].includes(route.view);
   if (focused) return <main className="focused-shell">{renderScreen()}{toast && <div className="toast" role="status">{toast}</div>}</main>;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell pramaan-app-shell">
       <aside id="main-sidebar" className={`sidebar ${mobileNavOpen ? 'sidebar-open' : ''}`}>
         <button className="sidebar-close icon-button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}><X size={19} /></button>
-        <a className="brand" href="#/dashboard" aria-label="SkillMirror AI overview">
+        <a className="brand" href="#/landing" aria-label="SkillMirror AI landing page" onClick={(event) => { event.preventDefault(); navigate('/landing'); }}>
           <span className="brand-mark"><span /><span /><span /></span>
           <span className="brand-copy"><strong>SkillMirror AI</strong><small>{role === 'owner' ? 'Factory operations' : 'Worker learning'}</small></span>
         </a>
