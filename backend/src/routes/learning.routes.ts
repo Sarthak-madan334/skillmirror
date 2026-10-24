@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { Prisma, PrismaClient } from '../../generated/client/client.js';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
@@ -7,7 +6,7 @@ import { assertFound, HttpError } from '../errors.js';
 import { reviewAttemptSchema, routeIdSchema, sessionProgressSchema, sessionRouteSchema, submitAttemptSchema } from '../schemas.js';
 import { findReadableTraining, findSessionAccess, findOwnedTraining, findWorkerProfile, requireOwnerOrganization } from '../services/access.js';
 import { formatEvidenceSuggestion, type AiProvider } from '../services/aiProvider.js';
-import { LocalMediaStorage } from '../storage/localMediaStorage.js';
+import { MediaStorage } from '../storage/mediaStorage.js';
 import { sendData } from '../utils/response.js';
 
 type StepForReport = { id: string; title: string; position: number; attempts: Array<{ id: string; attemptNumber: number; verificationStatus: string; feedback: string; submittedAt: Date; simulated: boolean }> };
@@ -75,7 +74,7 @@ async function persistReport(prisma: PrismaClient, sessionId: string) {
   return { ...report, results: summary.results, pendingSteps: summary.pendingSteps };
 }
 
-export function createLearningRouter(prisma: PrismaClient, storage: LocalMediaStorage, aiProvider?: AiProvider): Router {
+export function createLearningRouter(prisma: PrismaClient, storage: MediaStorage, aiProvider?: AiProvider): Router {
   const router = Router();
   const aiEvidenceLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -178,7 +177,7 @@ export function createLearningRouter(prisma: PrismaClient, storage: LocalMediaSt
     if (analyzeWithAi) {
       if (!evidenceIds.length) throw new HttpError(422, 'AI_EVIDENCE_REQUIRED', 'Attach at least one image before requesting an AI suggestion.');
       if (!aiProvider) throw new HttpError(503, 'AI_NOT_CONFIGURED', 'AI evidence suggestions are not configured. Submit without AI or ask an instructor to review.');
-      const assets = await prisma.mediaAsset.findMany({ where: { id: { in: analysisEvidenceIds }, ownerId: user.id, sessionId, stepId }, select: { id: true, storageKey: true, mimeType: true, sizeBytes: true } });
+      const assets = await prisma.mediaAsset.findMany({ where: { id: { in: analysisEvidenceIds }, ownerId: user.id, sessionId, stepId }, select: { id: true, storageKey: true, mimeType: true, sizeBytes: true, provider: true } });
       if (assets.length !== analysisEvidenceIds.length || assets.some((asset) => !['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType))) {
         throw new HttpError(415, 'AI_IMAGE_ONLY', 'AI analysis requires still image files or client-sampled video frames.');
       }
@@ -191,7 +190,7 @@ export function createLearningRouter(prisma: PrismaClient, storage: LocalMediaSt
         if (!asset) throw new HttpError(400, 'INVALID_EVIDENCE', 'AI analysis evidence must belong to this learner and session.');
         return {
           mimeType: asset.mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
-          base64: (await readFile(storage.resolveKey(asset.storageKey))).toString('base64'),
+          base64: (await storage.read(asset.storageKey, asset.provider)).toString('base64'),
           label: `Evidence frame ${index + 1}`,
         };
       }));

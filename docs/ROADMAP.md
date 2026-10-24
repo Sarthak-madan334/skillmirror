@@ -28,6 +28,8 @@ This roadmap distinguishes the implemented local prototype and API from future p
 - [x] Prisma schema, initial PostgreSQL migration, and backend service/API tests.
 - [ ] Apply migration and run integration tests against PostgreSQL.
 - [x] API-backed sessions, evidence attempts, human review, and derived reports.
+- [x] Private S3-compatible media adapter, authenticated streaming, local-to-S3 migration command, and configurable expiry cleanup.
+- [x] Per-user upload rate, daily-byte, and stored-media quotas; media-store readiness check.
 
 **Exit criteria:** A single task can be completed with human-reviewed attempts; simulated template output is never presented as real inference.
 
@@ -38,7 +40,7 @@ This roadmap distinguishes the implemented local prototype and API from future p
 - [ ] Link feedback to the evidence and approved rule.
 - [ ] Add retry guidance for poor camera angles or occlusion.
 - [ ] Add robust upload processing and retry behavior.
-- [ ] Add access controls, retention, and deletion flows.
+- [x] Add access controls, configurable media retention, and owner deletion flows.
 
 **Exit criteria:** Known failure modes are documented and unclear evidence fails safely.
 

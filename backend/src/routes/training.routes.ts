@@ -7,7 +7,7 @@ import { createTrainingSchema, generationSchema, listTrainingsSchema, nestedRout
 import { findOwnedTraining, findReadableTraining, assertStepIdSet } from '../services/access.js';
 import { SampleStepGenerator } from '../services/demoGenerator.js';
 import type { AiProvider } from '../services/aiProvider.js';
-import { LocalMediaStorage } from '../storage/localMediaStorage.js';
+import { MediaStorage } from '../storage/mediaStorage.js';
 import { sendData } from '../utils/response.js';
 
 const trainingInclude = { steps: { orderBy: { position: 'asc' as const } } };
@@ -16,7 +16,7 @@ function toClientTraining<T extends { status: TrainingStatus }>(training: T): Om
   return { ...training, status: training.status.toLowerCase() };
 }
 
-export function createTrainingRouter(prisma: PrismaClient, storage: LocalMediaStorage, aiProvider?: AiProvider): Router {
+export function createTrainingRouter(prisma: PrismaClient, storage: MediaStorage, aiProvider?: AiProvider): Router {
   const router = Router();
   const stepGenerator = new SampleStepGenerator();
   const aiGenerationLimiter = rateLimit({
@@ -173,9 +173,11 @@ export function createTrainingRouter(prisma: PrismaClient, storage: LocalMediaSt
     const sessions = await prisma.trainingSession.count({ where: { projectId: trainingId } });
     if (sessions > 0) throw new HttpError(409, 'TRAINING_HAS_HISTORY', 'This guide has learner history and cannot be deleted. Archive it instead.');
 
-    const assets = await prisma.mediaAsset.findMany({ where: { projectId: trainingId }, select: { storageKey: true } });
+    const assets = await prisma.mediaAsset.findMany({ where: { projectId: trainingId }, select: { storageKey: true, provider: true } });
     await prisma.trainingProject.delete({ where: { id: trainingId } });
-    await Promise.all(assets.map(({ storageKey }) => storage.remove(storageKey).catch(() => undefined)));
+    const cleanup = await Promise.allSettled(assets.map(({ storageKey, provider }) => storage.remove(storageKey, provider)));
+    const cleanupFailures = cleanup.filter((result) => result.status === 'rejected').length;
+    if (cleanupFailures) console.error(JSON.stringify({ level: 'error', event: 'training_media_cleanup_incomplete', cleanupFailures }));
     response.status(204).end();
   });
 

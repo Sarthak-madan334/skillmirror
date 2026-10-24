@@ -29,11 +29,11 @@ paths:
   /ready:
     get:
       tags: [Health]
-      summary: Database and schema readiness probe
+      summary: Database, schema, and media storage readiness probe
       responses:
-        '200': { description: Database is reachable and all required migrations are applied }
+        '200': { description: Database and active media storage are reachable and all required migrations are applied }
         '503':
-          description: Database migrations are missing or incomplete
+          description: Database migrations are missing or incomplete, or media storage is unavailable
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -294,7 +294,8 @@ paths:
                 stepId: { type: string }
       responses:
         '201': { description: Private media asset metadata }
-        '413': { description: File exceeds 250 MiB }
+        '413': { description: File exceeds 50 MiB or the account storage quota }
+        '429': { description: Per-user upload rate or daily-byte quota exceeded }
         '415': { description: MIME allowlist or detected file content mismatch }
   /sessions/{sessionId}/steps/{stepId}/attempts:
     post:
@@ -381,8 +382,9 @@ paths:
                 file: { type: string, format: binary }
                 stepId: { type: string }
       responses:
-        '201': { description: Private local media asset metadata }
-        '413': { description: File exceeds 250 MiB }
+        '201': { description: Private media asset metadata for the configured storage provider }
+        '413': { description: File exceeds 50 MiB or the account storage quota }
+        '429': { description: Per-user upload rate or daily-byte quota exceeded }
         '415': { description: Unsupported or mismatched file content }
   /media/{assetId}:
     parameters:

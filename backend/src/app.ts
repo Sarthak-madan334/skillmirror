@@ -10,7 +10,8 @@ import { createLearningRouter } from './routes/learning.routes.js';
 import { createMediaRouter } from './routes/media.routes.js';
 import { createTrainingRouter } from './routes/training.routes.js';
 import { createFactoryRouter } from './routes/factory.routes.js';
-import { LocalMediaStorage } from './storage/localMediaStorage.js';
+import { createMediaStorage } from './storage/createMediaStorage.js';
+import { MediaStorage } from './storage/mediaStorage.js';
 import { GroqChatCompletionsProvider, type AiProvider } from './services/aiProvider.js';
 import { sendData } from './utils/response.js';
 
@@ -20,19 +21,20 @@ const REQUIRED_MIGRATIONS = [
   '20261024140000_initial',
   '20261024160000_factory_workforce',
   '20261024180000_ai_assessment_provenance',
+  '20261024200000_s3_storage',
 ] as const;
 
 export type AppDependencies = {
   prisma?: PrismaClient;
   config?: AppConfig;
-  storage?: LocalMediaStorage;
+  storage?: MediaStorage;
   aiProvider?: AiProvider;
 };
 
 export function createApp(dependencies: AppDependencies = {}) {
   const config = dependencies.config ?? loadConfig();
   const database = dependencies.prisma ?? createPrismaClient(config.databaseUrl);
-  const storage = dependencies.storage ?? new LocalMediaStorage(config.mediaStorageDir);
+  const storage = dependencies.storage ?? createMediaStorage(config);
   const aiProvider = dependencies.aiProvider ?? (config.groqApiKey ? new GroqChatCompletionsProvider(config.groqApiKey, config.groqModel) : undefined);
   const app = express();
 
@@ -69,6 +71,8 @@ export function createApp(dependencies: AppDependencies = {}) {
   api.get('/health', (_request, response) => sendData(response, { status: 'ok' }));
   api.get('/ready', async (_request, response) => {
     await database.$queryRaw`SELECT 1`;
+    try { await storage.checkConnection(); }
+    catch { throw new HttpError(503, 'MEDIA_STORAGE_NOT_READY', 'The configured media storage is unavailable.'); }
 
     const [migrationTable] = await database.$queryRaw<Array<{ present: boolean }>>`
       SELECT to_regclass('"public"."_prisma_migrations"') IS NOT NULL AS present

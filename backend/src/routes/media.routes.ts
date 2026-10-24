@@ -10,23 +10,33 @@ import { requireAuth, type AuthUser } from '../auth.js';
 import { HttpError, assertFound } from '../errors.js';
 import { routeIdSchema } from '../schemas.js';
 import { findOwnedTraining, findSessionAccess } from '../services/access.js';
-import { ALLOWED_MEDIA_TYPES, LocalMediaStorage, MAX_MEDIA_SIZE_BYTES } from '../storage/localMediaStorage.js';
+import { ALLOWED_MEDIA_TYPES, MAX_MEDIA_SIZE_BYTES } from '../storage/localMediaStorage.js';
+import { MediaStorage } from '../storage/mediaStorage.js';
 import { sendData } from '../utils/response.js';
 
-const uploadLimiter = rateLimit({ windowMs: 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  keyGenerator: (_request, response) => (response.locals.user as AuthUser).id,
+  handler: (_request, response) => response.status(429).json({ success: false, data: null, error: { code: 'UPLOAD_RATE_LIMITED', message: 'Upload limit reached. Try again later.', details: null } }),
+});
+const MAX_USER_MEDIA_BYTES = 1024 * 1024 * 1024;
+const MAX_USER_DAILY_UPLOAD_BYTES = 500 * 1024 * 1024;
 
 function safeOriginalName(originalName: string): string {
   return (basename(originalName.replaceAll('\\', '/')).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 255) || 'upload');
 }
 
-export function createMediaRouter(prisma: PrismaClient, storage: LocalMediaStorage): Router {
+export function createMediaRouter(prisma: PrismaClient, storage: MediaStorage): Router {
   const router = Router();
   router.use(requireAuth(prisma));
 
   const fileUpload = (request: Request, response: Response, next: NextFunction) => {
     void storage.prepare().then(() => multer({
       dest: storage.temporaryDirectory,
-      limits: { fileSize: MAX_MEDIA_SIZE_BYTES, files: 1 },
+      limits: { fileSize: MAX_MEDIA_SIZE_BYTES, files: 1, fields: 2 },
       fileFilter: (_incoming, file, callback) => {
         if (!ALLOWED_MEDIA_TYPES.has(file.mimetype)) {
           callback(new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Upload a JPEG, PNG, WebP, MP4, MOV, or WebM file.'));
@@ -57,12 +67,19 @@ export function createMediaRouter(prisma: PrismaClient, storage: LocalMediaStora
   const persistUpload = async (file: Express.Multer.File | undefined, values: { ownerId: string; projectId: string; sessionId?: string; stepId?: string }) => {
     if (!file) throw new HttpError(400, 'FILE_REQUIRED', 'Attach a file using the `file` field.');
     try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [stored, recent] = await Promise.all([
+        prisma.mediaAsset.aggregate({ where: { ownerId: values.ownerId }, _sum: { sizeBytes: true } }),
+        prisma.mediaAsset.aggregate({ where: { ownerId: values.ownerId, createdAt: { gte: since } }, _sum: { sizeBytes: true } }),
+      ]);
+      if ((stored._sum.sizeBytes ?? 0) + file.size > MAX_USER_MEDIA_BYTES) throw new HttpError(413, 'USER_MEDIA_QUOTA', 'Your account has reached its 1 GiB media storage limit. Delete unused uploads before adding more.');
+      if ((recent._sum.sizeBytes ?? 0) + file.size > MAX_USER_DAILY_UPLOAD_BYTES) throw new HttpError(429, 'DAILY_UPLOAD_QUOTA', 'Your account has reached its daily upload allowance. Try again later.');
       const detected = await fileTypeFromFile(file.path);
       if (!detected || !ALLOWED_MEDIA_TYPES.has(detected.mime) || detected.mime !== file.mimetype) {
         throw new HttpError(415, 'INVALID_FILE_CONTENT', 'The file content does not match a supported image or video type.');
       }
       const storageKey = storage.createKey(detected.mime);
-      const finalPath = await storage.commit(file.path, storageKey);
+      await storage.commit(file.path, storageKey);
       try {
         const asset = await prisma.mediaAsset.create({
           data: {
@@ -74,12 +91,15 @@ export function createMediaRouter(prisma: PrismaClient, storage: LocalMediaStora
             storageKey,
             mimeType: detected.mime,
             sizeBytes: file.size,
+            provider: storage.provider,
           },
           select: { id: true, originalName: true, mimeType: true, sizeBytes: true, status: true, provider: true, createdAt: true },
         });
         return { ...asset, downloadUrl: `/api/v1/media/${asset.id}` };
       } catch (error) {
-        await storage.remove(storageKey).catch(() => undefined);
+        await storage.remove(storageKey).catch(() => {
+          console.error(JSON.stringify({ level: 'error', event: 'media_upload_cleanup_failed', provider: storage.provider }));
+        });
         throw error;
       }
     } catch (error) {
@@ -136,12 +156,51 @@ export function createMediaRouter(prisma: PrismaClient, storage: LocalMediaStora
       if (!canRead) {
         throw new HttpError(404, 'MEDIA_NOT_FOUND', 'Media was not found.');
       }
-      const filePath = storage.resolveKey(asset.storageKey);
+      const rangeHeader = request.get('range');
+      let byteRange: { start: number; end: number } | undefined;
+      if (rangeHeader) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+        if (!match || (!match[1] && !match[2]) || asset.sizeBytes <= 0) {
+          response.setHeader('Content-Range', `bytes */${asset.sizeBytes}`);
+          response.status(416).end();
+          return;
+        }
+        if (!match[1]) {
+          const suffix = Number(match[2]);
+          if (!Number.isSafeInteger(suffix) || suffix <= 0) {
+            response.setHeader('Content-Range', `bytes */${asset.sizeBytes}`);
+            response.status(416).end();
+            return;
+          }
+          byteRange = { start: Math.max(0, asset.sizeBytes - suffix), end: asset.sizeBytes - 1 };
+        } else {
+          const start = Number(match[1]);
+          const requestedEnd = match[2] ? Number(match[2]) : asset.sizeBytes - 1;
+          if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start >= asset.sizeBytes || requestedEnd < start) {
+            response.setHeader('Content-Range', `bytes */${asset.sizeBytes}`);
+            response.status(416).end();
+            return;
+          }
+          byteRange = { start, end: Math.min(requestedEnd, asset.sizeBytes - 1) };
+        }
+      }
+      const fileStream = await storage.openReadStream(asset.storageKey, asset.provider, byteRange);
       response.setHeader('Cache-Control', 'private, no-store');
       response.setHeader('X-Content-Type-Options', 'nosniff');
       response.type(asset.mimeType);
       response.setHeader('Content-Disposition', `inline; filename="${randomUUID()}"`);
-      response.sendFile(filePath, (error) => { if (error) next(error); });
+      response.setHeader('Accept-Ranges', 'bytes');
+      response.setHeader('Content-Length', String(byteRange ? byteRange.end - byteRange.start + 1 : asset.sizeBytes));
+      if (byteRange) {
+        response.status(206);
+        response.setHeader('Content-Range', `bytes ${byteRange.start}-${byteRange.end}/${asset.sizeBytes}`);
+      }
+      fileStream.once('error', (error) => {
+        console.error(JSON.stringify({ level: 'error', event: 'media_stream_failed', provider: asset.provider }));
+        if (response.headersSent) response.destroy(error);
+        else next(error);
+      });
+      fileStream.pipe(response);
     } catch (error) {
       next(error);
     }
@@ -152,8 +211,8 @@ export function createMediaRouter(prisma: PrismaClient, storage: LocalMediaStora
     const { id: assetId } = routeIdSchema.parse({ id: request.params.assetId });
     const asset = assertFound(await prisma.mediaAsset.findFirst({ where: { id: assetId, ownerId: user.id } }), 'Media was not found.');
     if (asset.attemptId) throw new HttpError(409, 'MEDIA_IN_USE', 'Evidence attached to an attempt cannot be deleted.');
+    await storage.remove(asset.storageKey, asset.provider);
     await prisma.mediaAsset.delete({ where: { id: assetId } });
-    await storage.remove(asset.storageKey).catch(() => undefined);
     response.status(204).end();
   });
 

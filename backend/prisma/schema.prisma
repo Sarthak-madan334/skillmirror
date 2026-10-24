@@ -39,6 +39,7 @@ enum UploadStatus {
 
 enum StorageProvider {
   LOCAL
+  S3
 }
 
 enum MembershipRole {
@@ -249,6 +250,7 @@ model MediaAsset {
   attempt      StepAttempt?    @relation(fields: [attemptId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, createdAt])
+  @@index([createdAt])
   @@index([projectId])
   @@index([sessionId])
 }

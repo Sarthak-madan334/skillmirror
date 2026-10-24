@@ -20,6 +20,7 @@ Before recording or uploading video, explain what will be processed, why it is n
 ## Storage, access, and deletion
 
 - Keep uploads private by default.
+- The backend retention job deletes stored media and its media record after `MEDIA_RETENTION_DAYS` (default 365 days). A learner can delete their own media while it is not attached to an attempt; attached evidence expires under the same configured retention period.
 - Apply access control to each task, video, extracted frame, and report.
 - Define retention periods and implement deletion for originals, derived frames, and generated outputs.
 - Avoid embedding direct public media URLs in logs or reports.

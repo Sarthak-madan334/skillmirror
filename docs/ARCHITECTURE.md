@@ -44,7 +44,7 @@ No endpoint performs computer vision. The sample generator returns a determinist
 
 ## Media
 
-Uploads use a MIME allowlist, 250 MiB limit, detected-content check, random UUID storage key, and private local filesystem path. Authorization runs before receiving the upload. Files are not served from a public directory. Local storage lacks malware scanning and is unsuitable for ephemeral production hosts; use a private durable object-store adapter before deployment.
+Uploads use a MIME allowlist, 50 MiB limit, detected-content check, random UUID storage key, and authorization before receiving the upload. The local adapter is for development; production can use a private S3-compatible object store. Reads stream through authenticated API routes, and media records retain their provider so stored assets remain addressable during migration. A retention job removes expired objects and rows; malware scanning and shared multi-instance rate limiting are not included.
 
 ## Transactional rules
 

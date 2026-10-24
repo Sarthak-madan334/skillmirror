@@ -4,7 +4,7 @@
 
 SkillMirror is a hackathon prototype with a React/Vite frontend and a Node.js, TypeScript, Express, PostgreSQL, and Prisma backend.
 
-> **Status:** A browser-only workspace and a separate API-backed workspace are available. The API implements authentication, training and steps, sessions, private local uploads, optional AI-assisted draft generation and still-image suggestions, human review, and reports. AI features require a server-side Groq API key; AI suggestions never decide or pass an assessment.
+> **Status:** A browser-only workspace and a separate API-backed workspace are available. The API implements authentication, training and steps, sessions, private uploads (local or S3-compatible), optional AI-assisted draft generation and image/frame suggestions, human review, and reports. AI features require a server-side Groq API key; AI suggestions never decide or pass an assessment.
 
 ## Product
 
@@ -47,7 +47,7 @@ Install packages from the repository root:
 npm install
 ```
 
-Create backend configuration from the example and set `DATABASE_URL`. Set `FRONTEND_ORIGIN` to the exact browser origin. To enable AI draft generation and image suggestions, set `GROQ_API_KEY` on the backend only; optionally set `GROQ_MODEL` (defaults to `qwen/qwen3.8-27b`). Leave the key unset to disable AI features while keeping manual workflows available.
+Create backend configuration from the example and set `DATABASE_URL`. Set `FRONTEND_ORIGIN` to the exact browser origin. For durable production uploads, use a private S3-compatible bucket and configure `MEDIA_STORAGE_DRIVER=s3` plus its backend-only `S3_*` credentials; see [deployment instructions](docs/DEPLOYMENT.md). To enable AI draft generation and image suggestions, set `GROQ_API_KEY` on the backend only; optionally set `GROQ_MODEL` (defaults to `qwen/qwen3.8-27b`). Leave the key unset to disable AI features while keeping manual workflows available.
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
@@ -61,7 +61,7 @@ npm run db:migrate
 npm run dev:backend
 ```
 
-The API listens on `http://localhost:8000`. `GET /api/v1/health` is liveness; `GET /api/v1/ready` checks PostgreSQL connectivity and confirms all required database migrations are applied.
+The API listens on `http://localhost:8000`. `GET /api/v1/health` is liveness; `GET /api/v1/ready` checks PostgreSQL connectivity, required migrations, and the active media provider.
 
 In a second terminal, optionally copy `.env.example` to `.env` and set `VITE_API_BASE_URL`; then run:
 
@@ -93,14 +93,14 @@ Implemented route groups include:
 - `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
 - Training list/create/read/update/delete, procedure save, progress, sample generation, and ordered step CRUD/reorder
 - Session create/read/progress/complete, evidence-backed attempts, owner review, and reports
-- Private local media upload/download/delete
+- Private media upload/download/delete (local or S3-compatible storage)
 
 See [backend/openapi.yaml](backend/openapi.yaml) for request and response details.
 
 ## Security and limitations
 
 - Passwords are bcrypt-hashed. Registration and login are rate-limited; registration responses do not reveal whether an email already exists.
-- Media uses server-generated keys, an allowlist, content sniffing, and a 250 MiB limit. Local disk is not durable on ephemeral hosts, and malware scanning is not included.
+- Media uses server-generated keys, an allowlist, content sniffing, a 50 MiB upload limit, per-user quotas, and a configurable retention sweep. Production deployments can use private S3-compatible storage; malware scanning is not included.
 - Training with session history cannot be edited or deleted; archive it or duplicate it instead.
 - AI features need a `GROQ_API_KEY` on the backend. Image/video-frame suggestions are optional and human-reviewed; evaluation datasets and accuracy validation remain future work.
 - This prototype is not a safety certification system. Start with low-risk tasks and obtain qualified human review for physical procedures.

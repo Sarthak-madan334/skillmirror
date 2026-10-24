@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, rename, rm, stat } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { HttpError } from '../errors.js';
 
 const EXTENSIONS: Record<string, string> = {
@@ -15,6 +17,7 @@ const EXTENSIONS: Record<string, string> = {
 const STORAGE_KEY_PATTERN = /^[0-9a-f-]{36}\.(jpg|png|webp|mp4|mov|webm)$/i;
 
 export class LocalMediaStorage {
+  readonly provider = 'LOCAL' as const;
   readonly root: string;
   readonly temporaryDirectory: string;
   readonly assetDirectory: string;
@@ -64,7 +67,30 @@ export class LocalMediaStorage {
   async getSize(storageKey: string): Promise<number> {
     return (await stat(this.resolveKey(storageKey))).size;
   }
+
+  async read(storageKey: string): Promise<Buffer> { return readFile(this.resolveKey(storageKey)); }
+
+  async openReadStream(storageKey: string, range?: { start: number; end: number }): Promise<Readable> {
+    return createReadStream(this.resolveKey(storageKey), range ? { start: range.start, end: range.end } : undefined);
+  }
+
+  async checkConnection(): Promise<void> { await this.prepare(); }
+
+  async removeTemporaryOlderThan(cutoff: Date): Promise<number> {
+    const entries = await readdir(this.temporaryDirectory, { withFileTypes: true });
+    let removed = 0;
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const fullPath = path.join(this.temporaryDirectory, entry.name);
+      const details = await stat(fullPath).catch(() => null);
+      if (details && details.mtime < cutoff) {
+        await rm(fullPath, { force: true });
+        removed += 1;
+      }
+    }
+    return removed;
+  }
 }
 
 export const ALLOWED_MEDIA_TYPES = new Set(Object.keys(EXTENSIONS));
-export const MAX_MEDIA_SIZE_BYTES = 250 * 1024 * 1024;
+export const MAX_MEDIA_SIZE_BYTES = 50 * 1024 * 1024;
