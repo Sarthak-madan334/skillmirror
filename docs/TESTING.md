@@ -31,7 +31,7 @@ With PostgreSQL configured:
 4. Exercise `/api/v1/health` and `/api/v1/ready`, then test create/publish/session/upload/review/report with an authenticated user.
 5. Verify rollback, migration repeatability, and User A/User B access boundaries against the real database.
 
-Local database status (2026-10-24): PostgreSQL was started in Docker and the initial Prisma migration was applied successfully. The factory/workforce migration is now present in the repository but has not yet been applied to the local or deployed database. `/api/v1/ready` now requires both migration records before returning HTTP 200. The full authenticated create/publish/session/upload/review/report flow, rollback behavior, migration repeatability, and cross-user access checks have not yet been exercised against that database. The Docker database is local development state and is not bundled with the repository.
+Local database status (2026-10-24): PostgreSQL was started in Docker, the initial Prisma migration was applied successfully, and `/api/v1/health` plus `/api/v1/ready` returned HTTP 200. The full authenticated create/publish/session/upload/review/report flow, rollback behavior, migration repeatability, and cross-user access checks have not yet been exercised against that database. The Docker database is local development state and is not bundled with the repository.
 
 ## Media and assessment
 

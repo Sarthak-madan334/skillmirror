@@ -16,7 +16,7 @@ From the repository root:
 Copy-Item backend/.env.example backend/.env
 ```
 
-Set `DATABASE_URL` in `backend/.env` to a PostgreSQL database that you control. `FRONTEND_ORIGIN` must match the browser origin exactly. `MEDIA_STORAGE_DIR` defaults to `./backend/storage`. For durable uploads, set `MEDIA_STORAGE_DRIVER=s3` and the `S3_*` credentials for a private S3-compatible bucket. `MEDIA_RETENTION_DAYS` defaults to 365. AI is optional: set `GROQ_API_KEY` in this backend-only environment to enable AI guide drafts and learner-opted-in still-image suggestions. `GROQ_MODEL` defaults to `qwen/qwen3.8-27b`. Never use a `VITE_*` variable for a secret.
+Set `DATABASE_URL` in `backend/.env` to a PostgreSQL database that you control. `FRONTEND_ORIGIN` must match the browser origin exactly. `MEDIA_STORAGE_DIR` defaults to `./backend/storage`.
 
 Then run:
 
@@ -27,7 +27,7 @@ npm run db:migrate
 npm run dev:backend
 ```
 
-The API listens on `http://localhost:8000`. `GET /api/v1/health` is a liveness check; `GET /api/v1/ready` checks database connectivity and required migration status.
+The API listens on `http://localhost:8000`. `GET /api/v1/health` is a liveness check; `GET /api/v1/ready` checks database connectivity.
 
 To seed fictional development data, set `DEV_SEED_EMAIL` and a unique `DEV_SEED_PASSWORD` of at least 12 characters in the environment, then run `npm run db:seed`. The seed creates no default production account and never prints the supplied password. It is intended only for a development database.
 
@@ -48,9 +48,8 @@ Backend tests use Supertest and a mocked Prisma boundary. They do not replace ru
 
 - Authentication is email/password with bcrypt hashes and random, database-backed, HttpOnly session cookies. Registration is open; production deployment still needs account-abuse controls and operational monitoring.
 - Unsafe browser methods require an exact configured `Origin`. Use HTTPS and secure cookies in production.
-- Local media uses private random filenames and content-type sniffing. It has no malware scanner and is not durable on ephemeral hosting disks. Configure the private S3-compatible storage adapter before production uploads.
-- The paper-bridge sample generator remains deterministic. Optional Groq Chat Completions integration creates structured, provenance-labelled draft steps and can give non-decisive image or browser-sampled video-frame suggestions when the learner opts in. Raw video is not sent to Groq. AI suggestions never change the attempt status from `NEEDS_REVIEW`; a human owner makes the decision. Evaluation datasets and accuracy validation are not implemented.
-- Media can be written to private S3-compatible storage, streamed through authenticated API routes, migrated from a still-available local volume, and purged by the configurable retention job. Per-user size and rate limits apply. See `docs/DEPLOYMENT.md` for backups, monitoring, and provider setup.
+- Local media uses private random filenames and content-type sniffing. It has no malware scanner and is not durable on ephemeral hosting disks. Use private object storage before production.
+- The only step generator is a labelled paper-bridge template. No AI provider or computer-vision verifier is configured.
 - Attempt submission with valid evidence creates `NEEDS_REVIEW`; without evidence it creates `UNABLE_TO_VERIFY`. Only the training owner can review attempts. No submission request automatically passes a step.
 - Existing attempts and sessions prevent procedure edits/deletion to preserve assessment history. Duplicate a guide to create a new version.
 - Live PostgreSQL migration and integration tests require a local PostgreSQL service and credentials.

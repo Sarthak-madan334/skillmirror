@@ -10,32 +10,19 @@ import { createLearningRouter } from './routes/learning.routes.js';
 import { createMediaRouter } from './routes/media.routes.js';
 import { createTrainingRouter } from './routes/training.routes.js';
 import { createFactoryRouter } from './routes/factory.routes.js';
-import { createMediaStorage } from './storage/createMediaStorage.js';
-import { MediaStorage } from './storage/mediaStorage.js';
-import { GroqChatCompletionsProvider, type AiProvider } from './services/aiProvider.js';
+import { LocalMediaStorage } from './storage/localMediaStorage.js';
 import { sendData } from './utils/response.js';
-
-// Keep this in sync with backend/prisma/migrations. Readiness must fail closed
-// when a release is running against a database that has not reached its schema.
-const REQUIRED_MIGRATIONS = [
-  '20261024140000_initial',
-  '20261024160000_factory_workforce',
-  '20261024180000_ai_assessment_provenance',
-  '20261024200000_s3_storage',
-] as const;
 
 export type AppDependencies = {
   prisma?: PrismaClient;
   config?: AppConfig;
-  storage?: MediaStorage;
-  aiProvider?: AiProvider;
+  storage?: LocalMediaStorage;
 };
 
 export function createApp(dependencies: AppDependencies = {}) {
   const config = dependencies.config ?? loadConfig();
   const database = dependencies.prisma ?? createPrismaClient(config.databaseUrl);
-  const storage = dependencies.storage ?? createMediaStorage(config);
-  const aiProvider = dependencies.aiProvider ?? (config.groqApiKey ? new GroqChatCompletionsProvider(config.groqApiKey, config.groqModel) : undefined);
+  const storage = dependencies.storage ?? new LocalMediaStorage(config.mediaStorageDir);
   const app = express();
 
   app.disable('x-powered-by');
@@ -71,33 +58,12 @@ export function createApp(dependencies: AppDependencies = {}) {
   api.get('/health', (_request, response) => sendData(response, { status: 'ok' }));
   api.get('/ready', async (_request, response) => {
     await database.$queryRaw`SELECT 1`;
-    try { await storage.checkConnection(); }
-    catch { throw new HttpError(503, 'MEDIA_STORAGE_NOT_READY', 'The configured media storage is unavailable.'); }
-
-    const [migrationTable] = await database.$queryRaw<Array<{ present: boolean }>>`
-      SELECT to_regclass('"public"."_prisma_migrations"') IS NOT NULL AS present
-    `;
-    if (!migrationTable?.present) {
-      throw new HttpError(503, 'DATABASE_SCHEMA_NOT_READY', 'Database migrations have not been applied.');
-    }
-
-    const appliedRows = await database.$queryRaw<Array<{ migration_name: string }>>`
-      SELECT "migration_name"
-      FROM "public"."_prisma_migrations"
-      WHERE "finished_at" IS NOT NULL AND "rolled_back_at" IS NULL
-    `;
-    const appliedMigrations = new Set(appliedRows.map(({ migration_name }) => migration_name));
-    const missingMigrations = REQUIRED_MIGRATIONS.filter((name) => !appliedMigrations.has(name));
-    if (missingMigrations.length > 0) {
-      throw new HttpError(503, 'DATABASE_SCHEMA_NOT_READY', 'Database migrations have not been applied.', { missingMigrations });
-    }
-
     sendData(response, { status: 'ready' });
   });
   api.use('/auth', createAuthRouter(database, config));
   api.use(createFactoryRouter(database));
-  api.use('/trainings', createTrainingRouter(database, storage, aiProvider));
-  api.use(createLearningRouter(database, storage, aiProvider));
+  api.use('/trainings', createTrainingRouter(database, storage));
+  api.use(createLearningRouter(database));
   api.use(createMediaRouter(database, storage));
 
   app.use('/api/v1', api);

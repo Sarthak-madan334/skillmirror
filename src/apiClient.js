@@ -95,7 +95,7 @@ export const skillMirrorApi = {
   updateStep: (trainingId, stepId, input) => request(`/trainings/${encode(trainingId)}/steps/${encode(stepId)}`, json('PATCH', input)),
   deleteStep: (trainingId, stepId) => request(`/trainings/${encode(trainingId)}/steps/${encode(stepId)}`, { method: 'DELETE' }),
   reorderSteps: (trainingId, stepIds) => request(`/trainings/${encode(trainingId)}/steps/reorder`, json('PUT', { stepIds })),
-  generateSampleSteps: (trainingId, mode = 'demo') => request(`/trainings/${encode(trainingId)}/generate-steps`, json('POST', { mode })),
+  generateSampleSteps: (trainingId) => request(`/trainings/${encode(trainingId)}/generate-steps`, json('POST', { mode: 'demo' })),
   trainingProgress: (trainingId) => request(`/trainings/${encode(trainingId)}/progress`),
   createSession: (trainingId) => request(`/trainings/${encode(trainingId)}/sessions`, { method: 'POST' }),
   getSession: (sessionId) => request(`/sessions/${encode(sessionId)}`),
@@ -113,7 +113,7 @@ export const skillMirrorApi = {
     return request(`/sessions/${encode(sessionId)}/media`, { method: 'POST', body });
   },
   getMediaUrl: (assetId) => `${API_BASE_URL}/api/v1/media/${encode(assetId)}`,
-  submitAttempt: (sessionId, stepId, evidenceIds = [], analyzeWithAi = false, analysisEvidenceIds = []) => request(`/sessions/${encode(sessionId)}/steps/${encode(stepId)}/attempts`, json('POST', { evidenceIds, analyzeWithAi, analysisEvidenceIds })),
+  submitAttempt: (sessionId, stepId, evidenceIds = []) => request(`/sessions/${encode(sessionId)}/steps/${encode(stepId)}/attempts`, json('POST', { evidenceIds })),
   listAttempts: (sessionId) => request(`/sessions/${encode(sessionId)}/attempts`),
   reviewAttempt: (sessionId, attemptId, input) => request(`/sessions/${encode(sessionId)}/attempts/${encode(attemptId)}/review`, json('PATCH', input)),
   completeSession: (sessionId) => request(`/sessions/${encode(sessionId)}/complete`, { method: 'POST' }),

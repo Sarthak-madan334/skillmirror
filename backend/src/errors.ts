@@ -45,7 +45,7 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
       data: null,
       error: {
         code: tooLarge ? 'PAYLOAD_TOO_LARGE' : 'UPLOAD_REJECTED',
-        message: tooLarge ? 'The uploaded file exceeds the 50 MiB limit.' : 'The upload could not be accepted.',
+        message: tooLarge ? 'The uploaded file exceeds the 250 MB limit.' : 'The upload could not be accepted.',
         details: null,
       },
     });

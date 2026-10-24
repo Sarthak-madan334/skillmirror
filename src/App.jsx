@@ -6,10 +6,8 @@ import {
   Search, Server, Settings2, ShieldCheck, Sparkles, Trash2, Upload, Users, X,
 } from 'lucide-react';
 import ApiWorkspace from './ApiWorkspace.jsx';
-import { FactoryOwnerDashboard as LiveOwnerDashboard, WorkersPage as LiveWorkersPage, FactoryReportsPage as LiveReportsPage, WorkerPortal as LiveWorkerPortal } from './FactoryPages.jsx';
 import { createBlankTraining, createId, createSampleSteps, EXAMPLE_ID, EXAMPLE_TRAINING } from './data.js';
 import { readStore, writeStore } from './persistence.js';
-import { skillMirrorApi } from './apiClient.js';
 
 const OWNER_NAV_ITEMS = [
   { path: '/dashboard', label: 'Overview', icon: Gauge },
@@ -283,7 +281,6 @@ function WorkerAssignmentsPage() {
 function App() {
   const [route, setRoute] = useState(routeFromHash);
   const [role, setRole] = useState('owner');
-  const [identity, setIdentity] = useState(null);
   const [store, setStore] = useState(() => readStore().data);
   const [recoveredData, setRecoveredData] = useState(() => readStore().recovered);
   const [storageError, setStorageError] = useState(false);
@@ -293,23 +290,9 @@ function App() {
   useEffect(() => {
     const updateRoute = () => { setRoute(routeFromHash()); setMobileNavOpen(false); };
     window.addEventListener('hashchange', updateRoute);
-    if (!window.location.hash) navigate('/dashboard');
+    if (!window.location.hash) navigate('/landing');
     return () => window.removeEventListener('hashchange', updateRoute);
   }, []);
-
-  const updateIdentity = React.useCallback((value) => {
-    setIdentity(value);
-    if (!value) { setRole('owner'); return; }
-    const canOwn = (value.memberships || []).some((membership) => membership.role === 'OWNER');
-    const canWork = (value.workerProfiles || []).length > 0;
-    setRole(canOwn ? 'owner' : canWork ? 'worker' : 'owner');
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    skillMirrorApi.me().then((result) => { if (active) updateIdentity(result); }).catch(() => {});
-    return () => { active = false; };
-  }, [updateIdentity]);
 
   useEffect(() => {
     setStorageError(!writeStore(store));
@@ -338,10 +321,11 @@ function App() {
   const showToast = (message) => setToast(message);
 
   const renderScreen = () => {
-    if (route.view === 'workers') return <LiveWorkersPage />;
-    if (route.view === 'reports') return <LiveReportsPage />;
-    if (route.view === 'assignments') return <LiveWorkerPortal onIdentityChange={updateIdentity} />;
-    if (route.view === 'dashboard') return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal onIdentityChange={updateIdentity} />;
+    if (route.view === 'landing') return <LandingPage />;
+    if (route.view === 'workers') return <WorkersPage />;
+    if (route.view === 'reports') return <FactoryReportsPage />;
+    if (route.view === 'assignments') return <WorkerAssignmentsPage />;
+    if (route.view === 'dashboard') return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
     if (route.view === 'create') {
       const project = route.id ? store.projects.find((item) => item.id === route.id) : null;
       return <Builder key={route.id || 'new'} initialProject={project} onSave={saveProject} onToast={showToast} />;
@@ -357,9 +341,11 @@ function App() {
     }
     if (route.view === 'library') return <Library projects={store.projects} />;
     if (route.view === 'progress') return <Progress projects={store.projects} sessions={store.sessions} />;
-    if (route.view === 'api') return <ApiWorkspace initialSessionId={route.id} onIdentityChange={updateIdentity} />;
-    return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal onIdentityChange={updateIdentity} />;
+    if (route.view === 'api') return <ApiWorkspace />;
+    return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
   };
+
+  if (route.view === 'landing') return <LandingPage />;
 
   const focused = ['learn', 'report'].includes(route.view);
   if (focused) return <main className="focused-shell">{renderScreen()}{toast && <div className="toast" role="status">{toast}</div>}</main>;
@@ -368,12 +354,15 @@ function App() {
     <div className="app-shell">
       <aside id="main-sidebar" className={`sidebar ${mobileNavOpen ? 'sidebar-open' : ''}`}>
         <button className="sidebar-close icon-button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}><X size={19} /></button>
-        <a className="brand" href="#/dashboard" aria-label="SkillMirror AI overview">
+        <a className="brand" href="#/landing" aria-label="SkillMirror landing page">
           <span className="brand-mark"><span /><span /><span /></span>
           <span className="brand-copy"><strong>SkillMirror AI</strong><small>{role === 'owner' ? 'Factory operations' : 'Worker learning'}</small></span>
         </a>
         <div className="workspace-label">WORKSPACE</div>
-        {identity && (identity.memberships || []).some((membership) => membership.role === 'OWNER') && (identity.workerProfiles || []).length > 0 && <div className="role-switch" aria-label="Workspace role switch"><button className={role === 'owner' ? 'active' : ''} onClick={() => setRole('owner')}>Owner</button><button className={role === 'worker' ? 'active' : ''} onClick={() => setRole('worker')}>Worker</button></div>}
+        <div className="role-switch" aria-label="Workspace role switch">
+          <button className={role === 'owner' ? 'active' : ''} onClick={() => setRole('owner')}>Owner</button>
+          <button className={role === 'worker' ? 'active' : ''} onClick={() => setRole('worker')}>Worker</button>
+        </div>
         <nav className="primary-nav" aria-label="Main navigation">
           {navItems.map(({ path, label, icon: Icon }) => (
             <a key={path} href={`#${path}`} className={`nav-link ${route.view === path.slice(1) ? 'nav-link-active' : ''}`}>
@@ -418,6 +407,26 @@ function App() {
   );
 }
 
+function LandingPage() {
+  return (
+    <main className="landing-page">
+      <nav className="landing-nav" aria-label="Landing page navigation">
+        <a className="landing-brand" href="#/landing" aria-label="SkillMirror home"><span className="brand-mark"><span /><span /><span /></span><span>skillmirror</span></a>
+        <div className="landing-nav-links"><a href="#how-it-works">How it works</a><a href="#/dashboard">Open workspace</a></div>
+        <button className="landing-nav-cta" onClick={() => navigate('/create')}>Start building <ArrowRight size={15} /></button>
+      </nav>
+      <section className="landing-hero">
+        <div className="landing-orbit landing-orbit-one" /><div className="landing-orbit landing-orbit-two" />
+        <div className="landing-hero-copy"><span className="landing-kicker"><Sparkles size={14} /> INTRODUCING SKILLMIRROR</span><h1>Practice<br /><em>with purpose.</em></h1><p>A skill. A guide. A better way to learn by doing.</p><div className="landing-actions"><button className="landing-primary" onClick={() => navigate('/create')}>Make a practice guide <ArrowRight size={17} /></button><a className="landing-secondary" href="#how-it-works"><Play size={15} /> See how it works</a></div><div className="landing-proof"><span><CheckCircle2 size={15} /> Step-by-step guidance</span><span><CheckCircle2 size={15} /> Human-friendly feedback</span></div></div>
+        <DemoPreview />
+      </section>
+      <section id="how-it-works" className="landing-story"><div className="landing-story-heading"><span className="eyebrow">FROM KNOW-HOW TO DOING</span><h2>A better way to pass on<br />the things worth knowing.</h2></div><div className="landing-story-grid"><article><span>01</span><h3>Capture the method</h3><p>Describe the task in your own words and attach a demonstration when it helps.</p></article><article><span>02</span><h3>Shape the checkpoints</h3><p>Turn a messy process into focused steps with expected results and self-checks.</p></article><article><span>03</span><h3>Practise with purpose</h3><p>Follow the guide, reflect on the attempt, and make the next round better.</p></article></div></section>
+      <section className="landing-bottom-cta"><span className="landing-kicker">READY WHEN YOU ARE</span><h2>Start with one skill<br />you know well.</h2><button className="landing-primary" onClick={() => navigate('/create')}>Build your first guide <ArrowRight size={17} /></button></section>
+      <footer className="landing-footer"><a className="landing-brand" href="#/landing"><span className="brand-mark"><span /><span /><span /></span><span>skillmirror</span></a><span>Practice, not proof.</span></footer>
+    </main>
+  );
+}
+
 function Dashboard({ projects, sessions }) {
   const recent = projects.slice(0, 3);
   const completedSessions = Object.entries(sessions).filter(([id, session]) => id !== EXAMPLE_ID && session.completed).length;
@@ -426,7 +435,7 @@ function Dashboard({ projects, sessions }) {
     <>
       <section className="welcome-banner">
         <div className="welcome-copy"><span className="eyebrow eyebrow-light"><span className="eyebrow-spark"><Sparkles size={13} /></span> YOUR PRACTICE SPACE</span><h1>Turn know-how<br />into <em>muscle memory.</em></h1><p>Build a clear guide from a practical skill. Then practise one focused step at a time.</p><div className="welcome-actions"><Button icon={Plus} onClick={() => navigate('/create')}>Create training</Button><button className="text-button text-button-light" onClick={() => navigate(`/detail/${EXAMPLE_ID}`)}><BookOpen size={17} /> Explore the example <ArrowRight size={16} /></button></div></div>
-        <div className="welcome-art" aria-label="A paper bridge practice exercise" role="img"><div className="art-label"><span className="art-label-dot" /> START WITH A SIMPLE SKILL</div><div className="art-photo" /><div className="art-caption"><span>FIELD NOTE 01</span><strong>Small steps. Real progress.</strong></div><div className="art-index">01<span> / 04</span></div></div>
+        <DemoPreview />
       </section>
 
       <div className="dashboard-intro"><div><span className="eyebrow">YOUR WORKSPACE</span><h2>A little progress, made visible.</h2></div><span className="local-chip"><span /> Saved in this browser</span></div>
@@ -442,6 +451,45 @@ function Dashboard({ projects, sessions }) {
 
       <section className="example-band"><div className="example-band-copy"><span className="eyebrow">NOT SURE WHERE TO START?</span><h2>Take a guided practice run.</h2><p>Explore a sample paper-bridge lesson. It includes example steps and clearly labelled self-checks.</p><button className="link-button" onClick={() => navigate(`/detail/${EXAMPLE_ID}`)}>Open the sample <ArrowRight size={15} /></button></div><div className="example-band-image" role="img" aria-label="Creative workspace with paper and art materials"><span className="sample-stamp"><FlaskConical size={14} /> SAMPLE</span></div></section>
     </>
+  );
+}
+
+function DemoPreview() {
+  const [phase, setPhase] = useState(0);
+  const phases = [
+    { label: 'DESCRIBE', title: 'Turn a task into a guide', detail: 'Make a clear learning path from what you already know.', icon: FileVideo2 },
+    { label: 'BUILD STEPS', title: 'Break it into checkpoints', detail: 'Each step gets an instruction, expected result, and self-check.', icon: ListChecks },
+    { label: 'PRACTISE', title: 'Follow one step at a time', detail: 'Learners focus, reflect, and keep their momentum.', icon: Play },
+    { label: 'IMPROVE', title: 'See what to try next', detail: 'A simple practice record makes progress visible.', icon: BadgeCheck },
+  ];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setPhase((current) => (current + 1) % phases.length), 3600);
+    return () => window.clearInterval(timer);
+  }, [phases.length]);
+
+  const current = phases[phase];
+  const Icon = current.icon;
+  return (
+    <div className="demo-preview" aria-label={`Animated product demo: ${current.label.toLowerCase()}`}>
+      <div className="demo-preview-glow" />
+      <div className="demo-preview-topline"><span className="art-label-dot" /> LIVE PRODUCT TOUR <span className="demo-preview-counter">0{phase + 1}<i> / 04</i></span></div>
+      <div className="demo-window">
+        <div className="demo-window-bar"><span /><span /><span /><small>skillmirror / practice studio</small></div>
+        <div className="demo-window-body">
+          <div className="demo-sidebar-lines"><span /><span /><span /><span /></div>
+          <div className="demo-content-lines">
+            <span className="demo-mini-label">{current.label}</span>
+            <strong>{current.title}</strong>
+            <p>{current.detail}</p>
+            <div className="demo-progress"><span style={{ width: `${((phase + 1) / phases.length) * 100}%` }} /></div>
+            <div className="demo-card-row"><div><Icon size={15} /><span>Checkpoint {phase + 1}</span></div><em>{phase === 2 ? 'In practice' : 'Ready'}</em></div>
+          </div>
+        </div>
+      </div>
+      <div className="demo-preview-caption"><span>WATCH IT TAKE SHAPE</span><strong>{current.label.toLowerCase()} → practise with purpose</strong></div>
+      <div className="demo-dots" aria-hidden="true">{phases.map((item, index) => <span key={item.label} className={index === phase ? 'demo-dot-active' : ''} />)}</div>
+    </div>
   );
 }
 

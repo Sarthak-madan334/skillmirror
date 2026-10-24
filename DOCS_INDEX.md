@@ -13,9 +13,9 @@
 ## Remaining
 
 - Add CI for frontend, backend, and Prisma schema checks.
-- Apply all committed Prisma migrations to Neon and verify `/api/v1/ready` returns 200 with the configured media provider; then run the full create/publish/session/upload/review/report and user-isolation integration checks against PostgreSQL.
-- Configure a private S3-compatible bucket, migrate any still-available local media, enable provider-side database/object backups, and test a restore before production uploads. Malware scanning and shared multi-instance upload limits remain to be added.
-- Evaluate AI suggestions on a consented, representative dataset; measure false passes/alarms and uncertainty handling before relying on them. Raw video understanding is future work; current video suggestions use only sampled frames.
+- Run the full create/publish/session/upload/review/report and user-isolation integration checks against PostgreSQL (the initial migration and health/readiness checks pass in the local Docker setup).
+- Add private durable object storage and malware scanning before production uploads.
+- Add real AI/verification providers only with validated schemas, provenance, and evaluated datasets.
 - Choose a project license before external distribution.
 
 For a Vercel frontend and Render API deployment, see [Deployment checklist](docs/DEPLOYMENT.md), including the same-site custom-domain requirement for the current session cookie and the free-tier storage/database limitations.

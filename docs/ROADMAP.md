@@ -17,30 +17,25 @@ This roadmap distinguishes the implemented local prototype and API from future p
 - [x] Server-backed training CRUD, step editing/reorder, and owner/published access rules.
 - [x] Validated local demonstration/evidence upload endpoints.
 - [x] Instructor-editable procedure drafts and owner-controlled publishing.
-- [x] Optional provider-backed structured procedure drafts with explicit provenance and review required.
-- [x] Explicitly opted-in, non-decisive still-image and browser-sampled video-frame suggestions; instructor retains the assessment decision.
 - [ ] Versioned procedure approvals and audit history.
 - [x] Learner guided-practice view with local self-checks.
 - [ ] Automated checkpoint evaluator for the selected task.
-- [ ] Evaluate image suggestions on a consented, representative dataset; measure false passes, false failures, and uncertainty handling before any trust claims.
 - [x] Human-reviewed `PASSED`, `NEEDS_IMPROVEMENT`, and `UNABLE_TO_VERIFY` outcomes.
 - [x] Local practice summary and browser-storage tests.
 - [x] Prisma schema, initial PostgreSQL migration, and backend service/API tests.
 - [ ] Apply migration and run integration tests against PostgreSQL.
 - [x] API-backed sessions, evidence attempts, human review, and derived reports.
-- [x] Private S3-compatible media adapter, authenticated streaming, local-to-S3 migration command, and configurable expiry cleanup.
-- [x] Per-user upload rate, daily-byte, and stored-media quotas; media-store readiness check.
 
 **Exit criteria:** A single task can be completed with human-reviewed attempts; simulated template output is never presented as real inference.
 
 ## Phase 2 — Reliable feedback
 
 - [ ] Build a broader evaluation dataset for the chosen checkpoint.
-- [ ] Measure false passes and false failures on a consented, representative dataset.
+- [ ] Measure false passes and false failures.
 - [ ] Link feedback to the evidence and approved rule.
 - [ ] Add retry guidance for poor camera angles or occlusion.
 - [ ] Add robust upload processing and retry behavior.
-- [x] Add access controls, configurable media retention, and owner deletion flows.
+- [ ] Add access controls, retention, and deletion flows.
 
 **Exit criteria:** Known failure modes are documented and unclear evidence fails safely.
 

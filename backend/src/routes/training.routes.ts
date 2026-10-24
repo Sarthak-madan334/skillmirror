@@ -1,13 +1,11 @@
 import { Prisma, PrismaClient, TrainingStatus } from '../../generated/client/client.js';
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import { requireAuth, type AuthUser } from '../auth.js';
 import { assertFound, HttpError } from '../errors.js';
 import { createTrainingSchema, generationSchema, listTrainingsSchema, nestedRouteSchema, reorderStepsSchema, routeIdSchema, stepInputSchema, updateStepSchema, updateTrainingSchema } from '../schemas.js';
 import { findOwnedTraining, findReadableTraining, assertStepIdSet } from '../services/access.js';
 import { SampleStepGenerator } from '../services/demoGenerator.js';
-import type { AiProvider } from '../services/aiProvider.js';
-import { MediaStorage } from '../storage/mediaStorage.js';
+import { LocalMediaStorage } from '../storage/localMediaStorage.js';
 import { sendData } from '../utils/response.js';
 
 const trainingInclude = { steps: { orderBy: { position: 'asc' as const } } };
@@ -16,16 +14,9 @@ function toClientTraining<T extends { status: TrainingStatus }>(training: T): Om
   return { ...training, status: training.status.toLowerCase() };
 }
 
-export function createTrainingRouter(prisma: PrismaClient, storage: MediaStorage, aiProvider?: AiProvider): Router {
+export function createTrainingRouter(prisma: PrismaClient, storage: LocalMediaStorage): Router {
   const router = Router();
   const stepGenerator = new SampleStepGenerator();
-  const aiGenerationLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 8,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    handler: (_request, response) => response.status(429).json({ success: false, data: null, error: { code: 'AI_RATE_LIMITED', message: 'AI generation limit reached. Try again later.', details: null } }),
-  });
   router.use(requireAuth(prisma));
 
   router.get('/', async (request, response) => {
@@ -72,17 +63,11 @@ export function createTrainingRouter(prisma: PrismaClient, storage: MediaStorage
     sendData(response, toClientTraining(created), 201);
   });
 
-  router.post('/:trainingId/generate-steps', (request, response, next) => request.body?.mode === 'ai' ? aiGenerationLimiter(request, response, next) : next(), async (request, response) => {
+  router.post('/:trainingId/generate-steps', async (request, response) => {
     const user = response.locals.user as AuthUser;
     const { id: trainingId } = routeIdSchema.parse({ id: request.params.trainingId });
     const project = await findOwnedTraining(prisma, trainingId, user.id);
     const input = generationSchema.parse(request.body);
-    if (input.mode === 'ai') {
-      if (!aiProvider) throw new HttpError(503, 'AI_NOT_CONFIGURED', 'AI guide generation is not configured. Add GROQ_API_KEY to the backend environment.');
-      const steps = await aiProvider.generateSteps({ title: project.title, description: project.description });
-      sendData(response, { steps, provenance: aiProvider.provider, model: aiProvider.model, simulated: false, approved: false, humanReviewRequired: true });
-      return;
-    }
     const draft = await stepGenerator.generate({ title: project.title, description: project.description, mode: input.mode });
     sendData(response, { ...draft, approved: false });
   });
@@ -173,11 +158,9 @@ export function createTrainingRouter(prisma: PrismaClient, storage: MediaStorage
     const sessions = await prisma.trainingSession.count({ where: { projectId: trainingId } });
     if (sessions > 0) throw new HttpError(409, 'TRAINING_HAS_HISTORY', 'This guide has learner history and cannot be deleted. Archive it instead.');
 
-    const assets = await prisma.mediaAsset.findMany({ where: { projectId: trainingId }, select: { storageKey: true, provider: true } });
+    const assets = await prisma.mediaAsset.findMany({ where: { projectId: trainingId }, select: { storageKey: true } });
     await prisma.trainingProject.delete({ where: { id: trainingId } });
-    const cleanup = await Promise.allSettled(assets.map(({ storageKey, provider }) => storage.remove(storageKey, provider)));
-    const cleanupFailures = cleanup.filter((result) => result.status === 'rejected').length;
-    if (cleanupFailures) console.error(JSON.stringify({ level: 'error', event: 'training_media_cleanup_incomplete', cleanupFailures }));
+    await Promise.all(assets.map(({ storageKey }) => storage.remove(storageKey).catch(() => undefined)));
     response.status(204).end();
   });
 

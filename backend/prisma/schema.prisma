@@ -39,7 +39,6 @@ enum UploadStatus {
 
 enum StorageProvider {
   LOCAL
-  S3
 }
 
 enum MembershipRole {
@@ -250,7 +249,6 @@ model MediaAsset {
   attempt      StepAttempt?    @relation(fields: [attemptId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, createdAt])
-  @@index([createdAt])
   @@index([projectId])
   @@index([sessionId])
 }
@@ -372,7 +370,6 @@ model StepAttempt {
   verificationStatus AttemptStatus @default(SUBMITTED)
   feedback           String        @default("") @db.VarChar(2000)
   verificationMethod String        @default("HUMAN_REVIEW") @db.VarChar(60)
-  aiSuggestion       Json?
   simulated          Boolean       @default(false)
   submittedAt        DateTime      @default(now())
   reviewedAt         DateTime?

@@ -4,7 +4,7 @@
 
 SkillMirror is a hackathon prototype with a React/Vite frontend and a Node.js, TypeScript, Express, PostgreSQL, and Prisma backend.
 
-> **Status:** A browser-only workspace and a separate API-backed workspace are available. The API implements authentication, training and steps, sessions, private uploads (local or S3-compatible), optional AI-assisted draft generation and image/frame suggestions, human review, and reports. AI features require a server-side Groq API key; AI suggestions never decide or pass an assessment.
+> **Status:** A browser-only workspace and a separate API-backed workspace are available. The API implements authentication, training and steps, sessions, private local uploads, human-reviewed attempts, and reports. No external AI inference or computer-vision verification is implemented.
 
 ## Product
 
@@ -18,7 +18,7 @@ Open **API workspace** in the app navigation to register or sign in and use serv
 
 Evidence submissions with attached files enter `NEEDS_REVIEW`; submissions without evidence become `UNABLE_TO_VERIFY`. Only the project owner can review an attempt. Completion requires a human-reviewed `PASSED` result for the latest attempt on every step. Submitting evidence never passes a step automatically.
 
-Guide authors can use an optional Groq-backed draft generator or the deterministic paper-bridge sample template. AI-generated procedures are marked with provider/model provenance, remain drafts, and require instructor review. Learners may explicitly opt in to send still-image evidence or up to three browser-sampled frames from a short video to the configured Groq model for a non-decisive suggestion. The recorded attempt remains `NEEDS_REVIEW` until a human owner reviews it. The full video is not sent to the provider. These capabilities are prototypes and have not been validated for real-world assessment.
+The only step generator is a deterministic paper-bridge template. Its result is marked simulated, unapproved, and subject to instructor review. It does not inspect demonstrations. Media is stored locally on the API host and is not analyzed.
 
 ## Architecture
 
@@ -29,7 +29,7 @@ React + Vite
               │ /api/v1, HttpOnly cookie
               ▼
 Node.js + TypeScript + Express
-  ├── Auth, ownership checks, Zod validation, optional AI provider
+  ├── Auth, ownership checks, Zod validation
   ├── Training, steps, sessions, attempts, reports
   ├── Local private media adapter
   └── Prisma ── PostgreSQL
@@ -47,7 +47,7 @@ Install packages from the repository root:
 npm install
 ```
 
-Create backend configuration from the example and set `DATABASE_URL`. Set `FRONTEND_ORIGIN` to the exact browser origin. For durable production uploads, use a private S3-compatible bucket and configure `MEDIA_STORAGE_DRIVER=s3` plus its backend-only `S3_*` credentials; see [deployment instructions](docs/DEPLOYMENT.md). To enable AI draft generation and image suggestions, set `GROQ_API_KEY` on the backend only; optionally set `GROQ_MODEL` (defaults to `qwen/qwen3.8-27b`). Leave the key unset to disable AI features while keeping manual workflows available.
+Create backend configuration from the example and set `DATABASE_URL`. Set `FRONTEND_ORIGIN` to the exact browser origin.
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
@@ -61,7 +61,7 @@ npm run db:migrate
 npm run dev:backend
 ```
 
-The API listens on `http://localhost:8000`. `GET /api/v1/health` is liveness; `GET /api/v1/ready` checks PostgreSQL connectivity, required migrations, and the active media provider.
+The API listens on `http://localhost:8000`. `GET /api/v1/health` is liveness; `GET /api/v1/ready` checks PostgreSQL.
 
 In a second terminal, optionally copy `.env.example` to `.env` and set `VITE_API_BASE_URL`; then run:
 
@@ -93,16 +93,16 @@ Implemented route groups include:
 - `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
 - Training list/create/read/update/delete, procedure save, progress, sample generation, and ordered step CRUD/reorder
 - Session create/read/progress/complete, evidence-backed attempts, owner review, and reports
-- Private media upload/download/delete (local or S3-compatible storage)
+- Private local media upload/download/delete
 
 See [backend/openapi.yaml](backend/openapi.yaml) for request and response details.
 
 ## Security and limitations
 
 - Passwords are bcrypt-hashed. Registration and login are rate-limited; registration responses do not reveal whether an email already exists.
-- Media uses server-generated keys, an allowlist, content sniffing, a 50 MiB upload limit, per-user quotas, and a configurable retention sweep. Production deployments can use private S3-compatible storage; malware scanning is not included.
+- Media uses server-generated keys, an allowlist, content sniffing, and a 250 MiB limit. Local disk is not durable on ephemeral hosts, and malware scanning is not included.
 - Training with session history cannot be edited or deleted; archive it or duplicate it instead.
-- AI features need a `GROQ_API_KEY` on the backend. Image/video-frame suggestions are optional and human-reviewed; evaluation datasets and accuracy validation remain future work.
+- No AI provider, media analyzer, or automated verifier is configured. The API never represents a sample template or file upload as analysis.
 - This prototype is not a safety certification system. Start with low-risk tasks and obtain qualified human review for physical procedures.
 - No database server is bundled. Migration application and live database integration require a PostgreSQL instance and credentials.
 
