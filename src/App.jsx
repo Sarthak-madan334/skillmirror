@@ -340,8 +340,8 @@ function App() {
   const renderScreen = () => {
     if (route.view === 'workers') return <LiveWorkersPage />;
     if (route.view === 'reports') return <LiveReportsPage />;
-    if (route.view === 'assignments') return <LiveWorkerPortal />;
-    if (route.view === 'dashboard') return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal />;
+    if (route.view === 'assignments') return <LiveWorkerPortal onIdentityChange={updateIdentity} />;
+    if (route.view === 'dashboard') return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal onIdentityChange={updateIdentity} />;
     if (route.view === 'create') {
       const project = route.id ? store.projects.find((item) => item.id === route.id) : null;
       return <Builder key={route.id || 'new'} initialProject={project} onSave={saveProject} onToast={showToast} />;
@@ -358,7 +358,7 @@ function App() {
     if (route.view === 'library') return <Library projects={store.projects} />;
     if (route.view === 'progress') return <Progress projects={store.projects} sessions={store.sessions} />;
     if (route.view === 'api') return <ApiWorkspace initialSessionId={route.id} onIdentityChange={updateIdentity} />;
-    return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal />;
+    return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal onIdentityChange={updateIdentity} />;
   };
 
   const focused = ['learn', 'report'].includes(route.view);
