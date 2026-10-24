@@ -36,7 +36,7 @@ export const createTrainingSchema = z.object({
   objectives: boundedText(500).default(''),
   materials: z.array(z.string().trim().min(1).max(120)).max(50).default([]),
   status: z.enum(['draft', 'published']).default('draft'),
-  demonstration: z.object({ mode: z.enum(['sample', 'local']), name: z.string().trim().min(1).max(255) }).nullable().default(null),
+  demonstration: z.object({ mode: z.enum(['sample', 'local', 'ai']), name: z.string().trim().min(1).max(255) }).nullable().default(null),
   steps: z.array(stepInputSchema).max(50).default([]),
 });
 
@@ -62,6 +62,12 @@ export const sessionProgressSchema = z.object({
 
 export const submitAttemptSchema = z.object({
   evidenceIds: z.array(idSchema).max(5).default([]),
+  analysisEvidenceIds: z.array(idSchema).max(4).default([]),
+  analyzeWithAi: z.boolean().default(false),
+}).superRefine((input, context) => {
+  if (input.analysisEvidenceIds.some((id) => !input.evidenceIds.includes(id))) context.addIssue({ code: 'custom', path: ['analysisEvidenceIds'], message: 'AI analysis files must also be attached as evidence.' });
+  if (input.analyzeWithAi && input.analysisEvidenceIds.length === 0) context.addIssue({ code: 'custom', path: ['analysisEvidenceIds'], message: 'Select image evidence for AI analysis.' });
+  if (!input.analyzeWithAi && input.analysisEvidenceIds.length > 0) context.addIssue({ code: 'custom', path: ['analysisEvidenceIds'], message: 'AI analysis evidence requires explicit opt-in.' });
 });
 
 export const reviewAttemptSchema = z.object({
@@ -69,7 +75,7 @@ export const reviewAttemptSchema = z.object({
   feedback: z.string().trim().min(1).max(2000),
 });
 
-export const generationSchema = z.object({ mode: z.literal('demo') });
+export const generationSchema = z.object({ mode: z.enum(['demo', 'ai']) });
 
 export const routeIdSchema = z.object({ id: idSchema });
 export const nestedRouteSchema = z.object({ trainingId: idSchema, stepId: idSchema.optional() });

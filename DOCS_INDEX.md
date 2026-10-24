@@ -15,7 +15,7 @@
 - Add CI for frontend, backend, and Prisma schema checks.
 - Apply both committed migrations to Neon and verify `/api/v1/ready` returns 200; then run the full create/publish/session/upload/review/report and user-isolation integration checks against PostgreSQL.
 - Add private durable object storage and malware scanning before production uploads.
-- Add real AI/verification providers only with validated schemas, provenance, and evaluated datasets.
+- Evaluate AI suggestions on a consented, representative dataset; measure false passes/alarms and uncertainty handling before relying on them. Video analysis remains future work.
 - Choose a project license before external distribution.
 
 For a Vercel frontend and Render API deployment, see [Deployment checklist](docs/DEPLOYMENT.md), including the same-site custom-domain requirement for the current session cookie and the free-tier storage/database limitations.

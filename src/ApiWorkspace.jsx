@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CircleHelp, FileImage, LoaderCircle, LogOut, Plus, RefreshCw, Server, ShieldCheck, Upload } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CircleHelp, FileImage, LoaderCircle, LogOut, Plus, RefreshCw, Server, ShieldCheck, Sparkles, Upload } from 'lucide-react';
 import { ApiClientError, API_BASE_URL, skillMirrorApi } from './apiClient.js';
 
 function ApiButton({ children, icon: Icon, variant = 'primary', ...props }) {
@@ -9,6 +9,52 @@ function ApiButton({ children, icon: Icon, variant = 'primary', ...props }) {
 function ErrorNotice({ error }) {
   if (!error) return null;
   return <div className="api-alert" role="alert"><AlertCircle size={17} /><span>{error}</span></div>;
+}
+
+async function sampleVideoFrames(file) {
+  if (file.size > 50 * 1024 * 1024) throw new Error('For AI video suggestions, use a video under 50 MiB. You can submit it for instructor review without AI.');
+  const objectUrl = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  video.preload = 'metadata';
+  video.muted = true;
+  video.playsInline = true;
+  video.src = objectUrl;
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error('The video could not be opened for frame sampling.')), 12000);
+      video.addEventListener('loadedmetadata', () => { window.clearTimeout(timeout); resolve(); }, { once: true });
+      video.addEventListener('error', () => { window.clearTimeout(timeout); reject(new Error('This browser cannot decode the selected video. Submit it for instructor review without AI.')); }, { once: true });
+    });
+    if (!Number.isFinite(video.duration) || video.duration <= 0 || video.duration > 120) throw new Error('AI video suggestions support videos up to 2 minutes. You can submit this video for instructor review without AI.');
+    if (!video.videoWidth || !video.videoHeight) throw new Error('The video has no readable frames. Submit it for instructor review without AI.');
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('This browser cannot sample video frames.');
+    const files = [];
+    for (const [index, fraction] of [0.15, 0.38, 0.62, 0.85].entries()) {
+      const target = Math.max(0, Math.min(video.duration - 0.05, video.duration * fraction));
+      await new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error('The video frame could not be decoded.')), 8000);
+        video.addEventListener('seeked', () => { window.clearTimeout(timeout); resolve(); }, { once: true });
+        video.addEventListener('error', () => { window.clearTimeout(timeout); reject(new Error('The video frame could not be decoded.')); }, { once: true });
+        video.currentTime = target;
+      });
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.68));
+      if (!blob) throw new Error('A video frame could not be prepared for analysis.');
+      files.push(new File([blob], `video-frame-${String(index + 1).padStart(2, '0')}.jpg`, { type: 'image/jpeg' }));
+    }
+    canvas.width = 0;
+    canvas.height = 0;
+    return files;
+  } finally {
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export default function ApiWorkspace({ initialSessionId, onIdentityChange }) {
@@ -22,6 +68,7 @@ export default function ApiWorkspace({ initialSessionId, onIdentityChange }) {
   const [newTraining, setNewTraining] = useState({ title: '', description: '' });
   const [newStep, setNewStep] = useState({ title: '', instructions: '', expected: '', verification: '' });
   const [evidenceFile, setEvidenceFile] = useState(null);
+  const [analyzeWithAi, setAnalyzeWithAi] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('Reviewed by the instructor.');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -172,11 +219,11 @@ export default function ApiWorkspace({ initialSessionId, onIdentityChange }) {
     });
   };
 
-  const generateSample = () => {
-    if (!selected || !/paper\s+bridge/i.test(`${selected.title} ${selected.description}`)) return;
-    if (selected.steps.length && !window.confirm('Replace the current draft steps with the sample outline?')) return;
+  const generateSteps = (mode) => {
+    if (!selected || (mode === 'demo' && !/paper\s+bridge/i.test(`${selected.title} ${selected.description}`))) return;
+    if (selected.steps.length && !window.confirm(`Replace the current draft steps with ${mode === 'ai' ? 'AI-generated' : 'sample'} steps?`)) return;
     void run(async () => {
-      const result = await skillMirrorApi.generateSampleSteps(selected.id);
+      const result = await skillMirrorApi.generateSampleSteps(selected.id, mode);
       const project = await skillMirrorApi.saveProcedure(selected.id, {
         title: selected.title,
         description: selected.description,
@@ -185,13 +232,13 @@ export default function ApiWorkspace({ initialSessionId, onIdentityChange }) {
         duration: selected.duration,
         objectives: selected.objectives,
         materials: selected.materials,
-        demonstration: selected.demonstration,
+        demonstration: mode === 'ai' ? { mode: 'ai', name: `${result.provenance}:${result.model}` } : selected.demonstration,
         status: 'draft',
         steps: result.steps,
       });
       setSelected(project);
       await reloadProjects();
-      setNotice(`Added ${result.steps.length} sample-template steps. Provenance: ${result.provenance}; simulated: ${result.simulated}; instructor review required.`);
+      setNotice(`Added ${result.steps.length} ${mode === 'ai' ? 'AI draft' : 'sample-template'} steps. Provenance: ${result.provenance}; simulated: ${result.simulated}; instructor review required.`);
     });
   };
 
@@ -218,15 +265,22 @@ export default function ApiWorkspace({ initialSessionId, onIdentityChange }) {
     if (!step) return;
     void run(async () => {
       let evidenceIds = [];
+      let analysisEvidenceIds = [];
       if (evidenceFile) {
-        const asset = await skillMirrorApi.uploadEvidence(session.id, step.id, evidenceFile);
-        evidenceIds = [asset.id];
+        if (analyzeWithAi && evidenceFile.type.startsWith('image/') && evidenceFile.size > 8 * 1024 * 1024) throw new Error('For AI suggestions, use an image under 8 MiB or submit it for instructor review without AI.');
+        const frameFiles = analyzeWithAi && evidenceFile.type.startsWith('video/') ? await sampleVideoFrames(evidenceFile) : [];
+        if (analyzeWithAi && frameFiles.reduce((total, file) => total + file.size, 0) > 12 * 1024 * 1024) throw new Error('The sampled video frames are too large for AI analysis. Submit the video for instructor review without AI.');
+        const filesToUpload = [evidenceFile, ...frameFiles];
+        const uploaded = await Promise.all(filesToUpload.map((file) => skillMirrorApi.uploadEvidence(session.id, step.id, file)));
+        evidenceIds = uploaded.map((asset) => asset.id);
+        analysisEvidenceIds = analyzeWithAi ? evidenceFile.type.startsWith('image/') ? [uploaded[0].id] : uploaded.slice(1).map((asset) => asset.id) : [];
         setEvidenceFile(null);
       }
-      const attempt = await skillMirrorApi.submitAttempt(session.id, step.id, evidenceIds);
+      const attempt = await skillMirrorApi.submitAttempt(session.id, step.id, evidenceIds, analyzeWithAi, analysisEvidenceIds);
+      setAnalyzeWithAi(false);
       await reloadSession();
       setNotice(attempt.verificationStatus === 'NEEDS_REVIEW'
-        ? 'Evidence submitted. Waiting for human review; no automated verification occurred.'
+        ? analyzeWithAi ? 'AI suggestion saved. An instructor must make the final decision.' : 'Evidence submitted. Waiting for human review; no automated verification occurred.'
         : 'No evidence was submitted, so this attempt is marked unable to verify.');
     });
   };
@@ -291,10 +345,10 @@ export default function ApiWorkspace({ initialSessionId, onIdentityChange }) {
         {!selected ? <div className="api-empty-main"><Server size={26} /><h2>Start with a backend draft.</h2><p>Create a guide on the left. It will be stored in PostgreSQL after the database is configured.</p></div> : <>
           <div className="api-selected-heading"><div><span className="eyebrow">{selected.status === 'published' ? 'PUBLISHED GUIDE' : 'SERVER DRAFT'}</span><h2>{selected.title}</h2><p>{selected.description}</p></div><div className="api-selected-actions"><ApiButton variant="secondary" onClick={togglePublish} disabled={busy || selected.steps.length === 0}>{selected.status === 'published' ? 'Return to draft' : 'Publish guide'}</ApiButton>{selected.status === 'published' && <ApiButton icon={ArrowRight} onClick={beginSession} disabled={busy}>Start / resume</ApiButton>}</div></div>
           <div className="api-steps-list">{selected.steps.map((step, index) => <article className="api-step-row" key={step.id}><span className="api-step-number">{String(index + 1).padStart(2, '0')}</span><div><strong>{step.title}</strong><p>{step.instructions}</p>{step.expected && <small>Expected: {step.expected}</small>}</div><div className="api-step-order"><button className="icon-button" aria-label={`Move ${step.title} up`} disabled={index === 0 || busy || Boolean(session)} onClick={() => reorder(step, -1)}><ArrowUp size={15} /></button><button className="icon-button" aria-label={`Move ${step.title} down`} disabled={index === selected.steps.length - 1 || busy || Boolean(session)} onClick={() => reorder(step, 1)}><ArrowDown size={15} /></button></div></article>)}</div>
-          {selected.status !== 'published' && !session && <form className="api-step-form" onSubmit={addStep}><div className="api-panel-heading"><h3><Plus size={16} /> Add a practice step</h3><ApiButton type="button" icon={Server} variant="secondary" onClick={generateSample} disabled={busy || !/paper\s+bridge/i.test(`${selected.title} ${selected.description}`)}>Use sample template</ApiButton></div><p className="api-clarifier">The paper-bridge outline is a local template, not AI generation. Review every step before publishing.</p><div className="api-step-form-grid"><label className="api-field">Step title<input required maxLength={120} value={newStep.title} onChange={(event) => setNewStep({ ...newStep, title: event.target.value })} /></label><label className="api-field">Instructions<textarea required maxLength={2000} rows={2} value={newStep.instructions} onChange={(event) => setNewStep({ ...newStep, instructions: event.target.value })} /></label><label className="api-field">Expected result<input maxLength={1000} value={newStep.expected} onChange={(event) => setNewStep({ ...newStep, expected: event.target.value })} /></label><label className="api-field">Self-check<input maxLength={1000} value={newStep.verification} onChange={(event) => setNewStep({ ...newStep, verification: event.target.value })} /></label></div><ApiButton icon={Plus} disabled={busy}>Save step</ApiButton></form>}
+          {selected.status !== 'published' && !session && <form className="api-step-form" onSubmit={addStep}><div className="api-panel-heading"><h3><Plus size={16} /> Add a practice step</h3><div><ApiButton type="button" icon={Sparkles} variant="secondary" onClick={() => generateSteps('ai')} disabled={busy}>Draft steps with AI</ApiButton><ApiButton type="button" icon={Server} variant="secondary" onClick={() => generateSteps('demo')} disabled={busy || !/paper\s+bridge/i.test(`${selected.title} ${selected.description}`)}>Use sample template</ApiButton></div></div><p className="api-clarifier">AI drafting sends this guide’s title and description to the configured OpenAI model. Review and edit every step and safety note before publishing. The sample template is deterministic and only covers paper bridges.</p><div className="api-step-form-grid"><label className="api-field">Step title<input required maxLength={120} value={newStep.title} onChange={(event) => setNewStep({ ...newStep, title: event.target.value })} /></label><label className="api-field">Instructions<textarea required maxLength={2000} rows={2} value={newStep.instructions} onChange={(event) => setNewStep({ ...newStep, instructions: event.target.value })} /></label><label className="api-field">Expected result<input maxLength={1000} value={newStep.expected} onChange={(event) => setNewStep({ ...newStep, expected: event.target.value })} /></label><label className="api-field">Self-check<input maxLength={1000} value={newStep.verification} onChange={(event) => setNewStep({ ...newStep, verification: event.target.value })} /></label></div><ApiButton icon={Plus} disabled={busy}>Save step</ApiButton></form>}
           {session && <section className="api-session-panel"><div className="api-session-heading"><div><span className="eyebrow">LEARNER SESSION</span><h3>{session.status === 'COMPLETED' ? 'Session complete' : `Step ${session.currentPosition + 1} of ${selected.steps.length}`}</h3></div><span className="api-state-chip">{session.status.toLowerCase().replace('_', ' ')}</span></div>
-            {currentStep ? <><div className="api-current-step"><strong>{currentStep.title}</strong><p>{currentStep.instructions}</p>{currentStep.expected && <small>Look for: {currentStep.expected}</small>}</div><div className="api-learner-actions"><button className="icon-button bordered-icon" aria-label="Previous step" disabled={session.currentPosition === 0 || busy} onClick={() => goToPosition(session.currentPosition - 1)}><ArrowLeft size={16} /></button><label className="api-evidence-control"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setEvidenceFile(event.target.files?.[0] || null)} /><FileImage size={16} /><span>{evidenceFile ? evidenceFile.name : 'Attach evidence'}</span><Upload size={14} /></label><ApiButton icon={Check} onClick={submitAttempt} disabled={busy}>Submit for review</ApiButton><button className="icon-button bordered-icon" aria-label="Next step" disabled={session.currentPosition >= selected.steps.length - 1 || busy} onClick={() => goToPosition(session.currentPosition + 1)}><ArrowRight size={16} /></button></div><p className="api-clarifier"><CircleHelp size={14} /> Evidence is stored privately. Submission requests human review; the backend does not run computer vision.</p></> : <p className="api-clarifier"><ShieldCheck size={15} /> Completion requires an instructor-reviewed pass for every step.</p>}
-            {attempts.length > 0 && <div className="api-attempts"><div className="api-panel-heading"><div><span className="eyebrow">RECORDED ATTEMPTS</span><h3>{attempts.length} submitted</h3></div><button className="api-inline-button" onClick={loadReport}>Refresh report</button></div>{attempts.map((attempt) => <article className="api-attempt-row" key={attempt.id}><div><strong>{attempt.step?.title || selected.steps.find((step) => step.id === attempt.stepId)?.title || 'Training step'} · attempt {attempt.attemptNumber}</strong><span>{attempt.verificationStatus.toLowerCase().replaceAll('_', ' ')} · {attempt.evidence.length} evidence files</span><p>{attempt.feedback}</p></div>{pendingAttempts.some((item) => item.id === attempt.id) && selected.ownerId === user.id && <div className="api-review-buttons"><button onClick={() => reviewAttempt(attempt.id, 'PASSED')} disabled={busy}>Pass</button><button onClick={() => reviewAttempt(attempt.id, 'NEEDS_IMPROVEMENT')} disabled={busy}>Needs work</button><button onClick={() => reviewAttempt(attempt.id, 'UNABLE_TO_VERIFY')} disabled={busy}>Unable</button></div>}</article>)}<div className="api-session-footer"><ApiButton variant="secondary" onClick={completeSession} disabled={busy || session.status === 'COMPLETED'}>Complete reviewed session</ApiButton><ApiButton variant="secondary" onClick={loadReport}>Get report</ApiButton></div></div>}
+            {currentStep ? <><div className="api-current-step"><strong>{currentStep.title}</strong><p>{currentStep.instructions}</p>{currentStep.expected && <small>Look for: {currentStep.expected}</small>}</div><div className="api-learner-actions"><button className="icon-button bordered-icon" aria-label="Previous step" disabled={session.currentPosition === 0 || busy} onClick={() => goToPosition(session.currentPosition - 1)}><ArrowLeft size={16} /></button><label className="api-evidence-control"><input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" onChange={(event) => { setEvidenceFile(event.target.files?.[0] || null); setAnalyzeWithAi(false); }} /><FileImage size={16} /><span>{evidenceFile ? evidenceFile.name : 'Attach evidence'}</span><Upload size={14} /></label><ApiButton icon={Check} onClick={submitAttempt} disabled={busy}>Submit for review</ApiButton><button className="icon-button bordered-icon" aria-label="Next step" disabled={session.currentPosition >= selected.steps.length - 1 || busy} onClick={() => goToPosition(session.currentPosition + 1)}><ArrowRight size={16} /></button></div>{evidenceFile && (evidenceFile.type.startsWith('image/') || evidenceFile.type.startsWith('video/')) && <label className="api-clarifier"><input type="checkbox" checked={analyzeWithAi} onChange={(event) => setAnalyzeWithAi(event.target.checked)} /> I agree to send this image, or up to four sampled frames from this video, to the configured OpenAI model for an advisory suggestion. The instructor makes the final decision.</label>}<p className="api-clarifier"><CircleHelp size={14} /> AI suggestions are optional, may be wrong, and never pass a step. For video, only up to four browser-sampled frames are sent; the full video remains SkillMirror evidence. Unchecked evidence goes directly to instructor review.</p></> : <p className="api-clarifier"><ShieldCheck size={15} /> Completion requires an instructor-reviewed pass for every step.</p>}
+            {attempts.length > 0 && <div className="api-attempts"><div className="api-panel-heading"><div><span className="eyebrow">RECORDED ATTEMPTS</span><h3>{attempts.length} submitted</h3></div><button className="api-inline-button" onClick={loadReport}>Refresh report</button></div>{attempts.map((attempt) => <article className="api-attempt-row" key={attempt.id}><div><strong>{attempt.step?.title || selected.steps.find((step) => step.id === attempt.stepId)?.title || 'Training step'} · attempt {attempt.attemptNumber}</strong><span>{attempt.verificationStatus.toLowerCase().replaceAll('_', ' ')} · {attempt.evidence.length} evidence files</span><p>{attempt.feedback}</p>{attempt.aiSuggestion && <p><strong>AI suggestion ({attempt.aiSuggestion.provider} · {attempt.aiSuggestion.model}):</strong> {attempt.aiSuggestion.suggestedOutcome} · {attempt.aiSuggestion.confidence} confidence. {attempt.aiSuggestion.rationale} <em>Instructor made the final decision.</em></p>}{attempt.evidence.map((asset) => <div key={asset.id} style={{ display: 'inline-block', margin: 6, maxWidth: 280 }}>{asset.mimeType.startsWith('video/') ? <video controls crossOrigin="use-credentials" src={skillMirrorApi.getMediaUrl(asset.id)} style={{ width: '100%', maxHeight: 220 }} /> : <img crossOrigin="use-credentials" src={skillMirrorApi.getMediaUrl(asset.id)} alt="Submitted evidence for instructor review" style={{ display: 'block', width: '100%', maxHeight: 220, objectFit: 'contain' }} />}</div>)}</div>{pendingAttempts.some((item) => item.id === attempt.id) && selected.ownerId === user.id && <div className="api-review-buttons"><button onClick={() => reviewAttempt(attempt.id, 'PASSED')} disabled={busy}>Pass</button><button onClick={() => reviewAttempt(attempt.id, 'NEEDS_IMPROVEMENT')} disabled={busy}>Needs work</button><button onClick={() => reviewAttempt(attempt.id, 'UNABLE_TO_VERIFY')} disabled={busy}>Unable</button></div>}</article>)}<div className="api-session-footer"><ApiButton variant="secondary" onClick={completeSession} disabled={busy || session.status === 'COMPLETED'}>Complete reviewed session</ApiButton><ApiButton variant="secondary" onClick={loadReport}>Get report</ApiButton></div></div>}
             {report && <div className="api-report"><span className="eyebrow">ASSESSMENT REPORT · {report.assessmentMethod}</span><strong>{report.passedSteps} of {report.totalSteps} steps reviewed as passed ({report.completionPercentage}%).</strong><p>{report.pendingSteps} awaiting review · {report.stepsNeedingImprovement} need improvement.</p>{report.recommendations.map((recommendation) => <small key={recommendation}>{recommendation}</small>)}</div>}
           </section>}
         </>}

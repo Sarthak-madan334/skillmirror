@@ -17,9 +17,12 @@ This roadmap distinguishes the implemented local prototype and API from future p
 - [x] Server-backed training CRUD, step editing/reorder, and owner/published access rules.
 - [x] Validated local demonstration/evidence upload endpoints.
 - [x] Instructor-editable procedure drafts and owner-controlled publishing.
+- [x] Optional provider-backed structured procedure drafts with explicit provenance and review required.
+- [x] Explicitly opted-in, non-decisive still-image and browser-sampled video-frame suggestions; instructor retains the assessment decision.
 - [ ] Versioned procedure approvals and audit history.
 - [x] Learner guided-practice view with local self-checks.
 - [ ] Automated checkpoint evaluator for the selected task.
+- [ ] Evaluate image suggestions on a consented, representative dataset; measure false passes, false failures, and uncertainty handling before any trust claims.
 - [x] Human-reviewed `PASSED`, `NEEDS_IMPROVEMENT`, and `UNABLE_TO_VERIFY` outcomes.
 - [x] Local practice summary and browser-storage tests.
 - [x] Prisma schema, initial PostgreSQL migration, and backend service/API tests.
@@ -31,7 +34,7 @@ This roadmap distinguishes the implemented local prototype and API from future p
 ## Phase 2 — Reliable feedback
 
 - [ ] Build a broader evaluation dataset for the chosen checkpoint.
-- [ ] Measure false passes and false failures.
+- [ ] Measure false passes and false failures on a consented, representative dataset.
 - [ ] Link feedback to the evidence and approved rule.
 - [ ] Add retry guidance for poor camera angles or occlusion.
 - [ ] Add robust upload processing and retry behavior.

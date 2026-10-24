@@ -11,6 +11,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url().refine((value) => value.startsWith('postgresql://') || value.startsWith('postgres://'), 'DATABASE_URL must use PostgreSQL'),
   FRONTEND_ORIGIN: z.string().url().default('http://localhost:5173'),
   MEDIA_STORAGE_DIR: z.string().min(1).default('./backend/storage'),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().min(1).default('gpt-5.4-mini'),
 });
 
 export type AppConfig = {
@@ -19,6 +21,8 @@ export type AppConfig = {
   databaseUrl: string;
   frontendOrigin: string;
   mediaStorageDir: string;
+  openAiApiKey?: string;
+  openAiModel: string;
 };
 
 export function loadConfig(values: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -34,5 +38,7 @@ export function loadConfig(values: NodeJS.ProcessEnv = process.env): AppConfig {
     databaseUrl: parsed.data.DATABASE_URL,
     frontendOrigin: parsed.data.FRONTEND_ORIGIN,
     mediaStorageDir: parsed.data.MEDIA_STORAGE_DIR,
+    openAiApiKey: parsed.data.OPENAI_API_KEY,
+    openAiModel: parsed.data.OPENAI_MODEL,
   };
 }

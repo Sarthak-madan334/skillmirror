@@ -370,6 +370,7 @@ model StepAttempt {
   verificationStatus AttemptStatus @default(SUBMITTED)
   feedback           String        @default("") @db.VarChar(2000)
   verificationMethod String        @default("HUMAN_REVIEW") @db.VarChar(60)
+  aiSuggestion       Json?
   simulated          Boolean       @default(false)
   submittedAt        DateTime      @default(now())
   reviewedAt         DateTime?

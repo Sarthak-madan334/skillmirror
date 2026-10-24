@@ -16,7 +16,7 @@ From the repository root:
 Copy-Item backend/.env.example backend/.env
 ```
 
-Set `DATABASE_URL` in `backend/.env` to a PostgreSQL database that you control. `FRONTEND_ORIGIN` must match the browser origin exactly. `MEDIA_STORAGE_DIR` defaults to `./backend/storage`.
+Set `DATABASE_URL` in `backend/.env` to a PostgreSQL database that you control. `FRONTEND_ORIGIN` must match the browser origin exactly. `MEDIA_STORAGE_DIR` defaults to `./backend/storage`. AI is optional: set `OPENAI_API_KEY` in this backend-only environment to enable AI guide drafts and learner-opted-in still-image suggestions. `OPENAI_MODEL` defaults to `gpt-5.4-mini`. Never use a `VITE_*` variable for a secret.
 
 Then run:
 
@@ -49,7 +49,7 @@ Backend tests use Supertest and a mocked Prisma boundary. They do not replace ru
 - Authentication is email/password with bcrypt hashes and random, database-backed, HttpOnly session cookies. Registration is open; production deployment still needs account-abuse controls and operational monitoring.
 - Unsafe browser methods require an exact configured `Origin`. Use HTTPS and secure cookies in production.
 - Local media uses private random filenames and content-type sniffing. It has no malware scanner and is not durable on ephemeral hosting disks. Use private object storage before production.
-- The only step generator is a labelled paper-bridge template. No AI provider or computer-vision verifier is configured.
+- The paper-bridge sample generator remains deterministic. Optional OpenAI Responses integration creates structured, provenance-labelled draft steps and can give non-decisive image or browser-sampled video-frame suggestions when the learner opts in. Raw video is not sent to OpenAI. AI suggestions never change the attempt status from `NEEDS_REVIEW`; a human owner makes the decision. Evaluation datasets and accuracy validation are not implemented.
 - Attempt submission with valid evidence creates `NEEDS_REVIEW`; without evidence it creates `UNABLE_TO_VERIFY`. Only the training owner can review attempts. No submission request automatically passes a step.
 - Existing attempts and sessions prevent procedure edits/deletion to preserve assessment history. Duplicate a guide to create a new version.
 - Live PostgreSQL migration and integration tests require a local PostgreSQL service and credentials.

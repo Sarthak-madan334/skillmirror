@@ -11,6 +11,7 @@ import { createMediaRouter } from './routes/media.routes.js';
 import { createTrainingRouter } from './routes/training.routes.js';
 import { createFactoryRouter } from './routes/factory.routes.js';
 import { LocalMediaStorage } from './storage/localMediaStorage.js';
+import { OpenAiResponsesProvider, type AiProvider } from './services/aiProvider.js';
 import { sendData } from './utils/response.js';
 
 // Keep this in sync with backend/prisma/migrations. Readiness must fail closed
@@ -18,18 +19,21 @@ import { sendData } from './utils/response.js';
 const REQUIRED_MIGRATIONS = [
   '20261024140000_initial',
   '20261024160000_factory_workforce',
+  '20261024180000_ai_assessment_provenance',
 ] as const;
 
 export type AppDependencies = {
   prisma?: PrismaClient;
   config?: AppConfig;
   storage?: LocalMediaStorage;
+  aiProvider?: AiProvider;
 };
 
 export function createApp(dependencies: AppDependencies = {}) {
   const config = dependencies.config ?? loadConfig();
   const database = dependencies.prisma ?? createPrismaClient(config.databaseUrl);
   const storage = dependencies.storage ?? new LocalMediaStorage(config.mediaStorageDir);
+  const aiProvider = dependencies.aiProvider ?? (config.openAiApiKey ? new OpenAiResponsesProvider(config.openAiApiKey, config.openAiModel) : undefined);
   const app = express();
 
   app.disable('x-powered-by');
@@ -88,8 +92,8 @@ export function createApp(dependencies: AppDependencies = {}) {
   });
   api.use('/auth', createAuthRouter(database, config));
   api.use(createFactoryRouter(database));
-  api.use('/trainings', createTrainingRouter(database, storage));
-  api.use(createLearningRouter(database));
+  api.use('/trainings', createTrainingRouter(database, storage, aiProvider));
+  api.use(createLearningRouter(database, storage, aiProvider));
   api.use(createMediaRouter(database, storage));
 
   app.use('/api/v1', api);

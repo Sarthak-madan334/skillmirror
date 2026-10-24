@@ -168,10 +168,11 @@ paths:
               type: object
               required: [mode]
               properties:
-                mode: { const: demo }
+                mode: { type: string, enum: [demo, ai] }
       responses:
-        '200': { description: Sample-only paper bridge draft; provenance demo-template, simulated true, approved false }
-        '422': { description: Demo template only supports the paper bridge task; no media was analyzed }
+        '200': { description: Draft steps with provenance, simulation, approval, and human-review metadata; AI mode requires OPENAI_API_KEY }
+        '422': { description: Demo template only supports the paper bridge task }
+        '503': { description: AI provider is not configured }
   /trainings/{trainingId}/progress:
     get:
       tags: [Training]
@@ -310,9 +311,14 @@ paths:
               type: object
               properties:
                 evidenceIds: { type: array, maxItems: 5, items: { type: string } }
+                analyzeWithAi: { type: boolean, default: false, description: Explicitly opt in to send attached still images to the configured OpenAI model; the human review status is unchanged }
+                analysisEvidenceIds: { type: array, maxItems: 4, items: { type: string }, description: Evidence IDs used for AI analysis; for video these are browser-sampled JPEG frames also included in evidenceIds }
       responses:
-        '201': { description: Needs review with owned evidence, otherwise unable to verify; never auto-passed }
+        '201': { description: Needs review with owned evidence, optionally with an advisory AI suggestion, otherwise unable to verify; never auto-passed }
         '400': { description: Invalid evidence references }
+        '413': { description: Image exceeds AI analysis size limit }
+        '415': { description: AI analysis only supports still images and sampled video frames }
+        '503': { description: AI provider is not configured or rate limited }
   /sessions/{sessionId}/attempts:
     get:
       tags: [Learning]

@@ -1,9 +1,13 @@
+import { readFile } from 'node:fs/promises';
 import { Prisma, PrismaClient } from '../../generated/client/client.js';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { requireAuth, type AuthUser } from '../auth.js';
 import { assertFound, HttpError } from '../errors.js';
 import { reviewAttemptSchema, routeIdSchema, sessionProgressSchema, sessionRouteSchema, submitAttemptSchema } from '../schemas.js';
 import { findReadableTraining, findSessionAccess, findOwnedTraining, findWorkerProfile, requireOwnerOrganization } from '../services/access.js';
+import { formatEvidenceSuggestion, type AiProvider } from '../services/aiProvider.js';
+import { LocalMediaStorage } from '../storage/localMediaStorage.js';
 import { sendData } from '../utils/response.js';
 
 type StepForReport = { id: string; title: string; position: number; attempts: Array<{ id: string; attemptNumber: number; verificationStatus: string; feedback: string; submittedAt: Date; simulated: boolean }> };
@@ -71,8 +75,15 @@ async function persistReport(prisma: PrismaClient, sessionId: string) {
   return { ...report, results: summary.results, pendingSteps: summary.pendingSteps };
 }
 
-export function createLearningRouter(prisma: PrismaClient): Router {
+export function createLearningRouter(prisma: PrismaClient, storage: LocalMediaStorage, aiProvider?: AiProvider): Router {
   const router = Router();
+  const aiEvidenceLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 6,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_request, response) => response.status(429).json({ success: false, data: null, error: { code: 'AI_RATE_LIMITED', message: 'AI evidence suggestion limit reached. Submit for instructor review or try again later.', details: null } }),
+  });
   router.use(requireAuth(prisma));
 
   router.post('/worker/assignments/:assignmentId/sessions', async (request, response) => {
@@ -149,23 +160,48 @@ export function createLearningRouter(prisma: PrismaClient): Router {
     }));
   });
 
-  router.post('/sessions/:sessionId/steps/:stepId/attempts', async (request, response) => {
+  router.post('/sessions/:sessionId/steps/:stepId/attempts', (request, response, next) => request.body?.analyzeWithAi === true ? aiEvidenceLimiter(request, response, next) : next(), async (request, response) => {
     const user = response.locals.user as AuthUser;
     const { sessionId } = sessionRouteSchema.parse({ sessionId: request.params.sessionId });
     const { id: stepId } = routeIdSchema.parse({ id: request.params.stepId });
     const session = await findSessionAccess(prisma, sessionId, user.id);
     if (session.learnerId !== user.id) throw new HttpError(403, 'FORBIDDEN', 'Only the learner can submit an attempt.');
     if (session.status !== 'IN_PROGRESS') throw new HttpError(409, 'SESSION_NOT_ACTIVE', 'This session is not accepting attempts.');
-    const step = await prisma.trainingStep.findFirst({ where: { id: stepId, projectId: session.projectId } });
-    assertFound(step, 'Training step was not found.');
-    const { evidenceIds } = submitAttemptSchema.parse(request.body);
+    const step = assertFound(await prisma.trainingStep.findFirst({ where: { id: stepId, projectId: session.projectId } }), 'Training step was not found.');
+    const { evidenceIds, analysisEvidenceIds, analyzeWithAi } = submitAttemptSchema.parse(request.body);
     if (evidenceIds.length) {
       const evidence = await prisma.mediaAsset.findMany({ where: { id: { in: evidenceIds }, ownerId: user.id, sessionId, stepId, attemptId: null }, select: { id: true } });
       if (evidence.length !== evidenceIds.length) throw new HttpError(400, 'INVALID_EVIDENCE', 'Evidence must belong to this learner and session.');
     }
 
+    let aiSuggestion: Awaited<ReturnType<AiProvider['analyzeEvidence']>> | undefined;
+    if (analyzeWithAi) {
+      if (!evidenceIds.length) throw new HttpError(422, 'AI_EVIDENCE_REQUIRED', 'Attach at least one image before requesting an AI suggestion.');
+      if (!aiProvider) throw new HttpError(503, 'AI_NOT_CONFIGURED', 'AI evidence suggestions are not configured. Submit without AI or ask an instructor to review.');
+      const assets = await prisma.mediaAsset.findMany({ where: { id: { in: analysisEvidenceIds }, ownerId: user.id, sessionId, stepId }, select: { id: true, storageKey: true, mimeType: true, sizeBytes: true } });
+      if (assets.length !== analysisEvidenceIds.length || assets.some((asset) => !['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType))) {
+        throw new HttpError(415, 'AI_IMAGE_ONLY', 'AI analysis requires still image files or client-sampled video frames.');
+      }
+      if (assets.some((asset) => asset.sizeBytes > 8 * 1024 * 1024) || assets.reduce((total, asset) => total + asset.sizeBytes, 0) > 12 * 1024 * 1024) {
+        throw new HttpError(413, 'AI_EVIDENCE_TOO_LARGE', 'For AI suggestions, each image must be at most 8 MiB and all images together at most 12 MiB.');
+      }
+      const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+      const images = await Promise.all(analysisEvidenceIds.map(async (id, index) => {
+        const asset = assetsById.get(id);
+        if (!asset) throw new HttpError(400, 'INVALID_EVIDENCE', 'AI analysis evidence must belong to this learner and session.');
+        return {
+          mimeType: asset.mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
+          base64: (await readFile(storage.resolveKey(asset.storageKey))).toString('base64'),
+          label: `Evidence frame ${index + 1}`,
+        };
+      }));
+      aiSuggestion = await aiProvider.analyzeEvidence({ step: { title: step.title, instructions: step.instructions, expected: step.expected, verification: step.verification }, images });
+    }
+
     const status = evidenceIds.length ? 'NEEDS_REVIEW' : 'UNABLE_TO_VERIFY';
-    const feedback = evidenceIds.length
+    const feedback = aiSuggestion && aiProvider
+      ? formatEvidenceSuggestion(aiSuggestion, aiProvider.model)
+      : evidenceIds.length
       ? 'Evidence was submitted for instructor review. No automated verification was performed.'
       : 'No evidence was attached, so this step could not be verified. Ask an instructor for help.';
     const attempt = await prisma.$transaction(async (transaction) => {
@@ -177,7 +213,8 @@ export function createLearningRouter(prisma: PrismaClient): Router {
           attemptNumber: previousAttempts + 1,
           verificationStatus: status,
           feedback,
-          verificationMethod: evidenceIds.length ? 'HUMAN_REVIEW' : 'NO_EVIDENCE',
+          verificationMethod: aiSuggestion ? 'AI_ASSISTED_HUMAN_REVIEW' : evidenceIds.length ? 'HUMAN_REVIEW' : 'NO_EVIDENCE',
+          ...(aiSuggestion && aiProvider ? { aiSuggestion: { provider: aiProvider.provider, model: aiProvider.model, ...aiSuggestion } } : {}),
           simulated: false,
         },
       });
@@ -213,7 +250,13 @@ export function createLearningRouter(prisma: PrismaClient): Router {
     if (attempt.verificationStatus !== 'NEEDS_REVIEW') throw new HttpError(409, 'ATTEMPT_NOT_REVIEWABLE', 'Only attempts awaiting human review can be reviewed.');
     const reviewed = await prisma.stepAttempt.update({
       where: { id: attemptId },
-      data: { verificationStatus: input.status, feedback: input.feedback, verificationMethod: 'HUMAN_REVIEW', reviewedAt: new Date(), simulated: false },
+      data: {
+        verificationStatus: input.status,
+        feedback: input.feedback,
+        verificationMethod: attempt.verificationMethod === 'AI_ASSISTED_HUMAN_REVIEW' ? 'AI_ASSISTED_HUMAN_REVIEW' : 'HUMAN_REVIEW',
+        reviewedAt: new Date(),
+        simulated: false,
+      },
     });
     if (session.assignmentId) {
       const [steps, latestAttempts] = await Promise.all([
