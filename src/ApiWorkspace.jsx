@@ -11,7 +11,7 @@ function ErrorNotice({ error }) {
   return <div className="api-alert" role="alert"><AlertCircle size={17} /><span>{error}</span></div>;
 }
 
-export default function ApiWorkspace() {
+export default function ApiWorkspace({ initialSessionId, onIdentityChange }) {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authFields, setAuthFields] = useState({ name: '', email: '', password: '' });
@@ -66,14 +66,14 @@ export default function ApiWorkspace() {
   useEffect(() => {
     let cancelled = false;
     skillMirrorApi.me().then((result) => {
-      if (!cancelled) setUser(result.user);
+      if (!cancelled) { setUser(result.user); onIdentityChange?.(result); }
     }).catch((cause) => {
       if (!cancelled && !(cause instanceof ApiClientError && cause.status === 401)) {
         setError(cause instanceof Error ? cause.message : 'Could not check the API session.');
       }
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [onIdentityChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +85,19 @@ export default function ApiWorkspace() {
     });
     return () => { cancelled = true; };
   }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user || !initialSessionId) return undefined;
+    void run(async () => {
+      const opened = await skillMirrorApi.getSession(initialSessionId);
+      const project = await skillMirrorApi.getTraining(opened.projectId);
+      setSelected(project);
+      setSession(opened);
+      setReport(null);
+    });
+    return () => { cancelled = true; };
+  }, [user, initialSessionId]);
 
   const authenticate = (event) => {
     event.preventDefault();
@@ -98,6 +111,8 @@ export default function ApiWorkspace() {
       }
       const result = await skillMirrorApi.login({ email: authFields.email, password: authFields.password });
       setUser(result.user);
+      const identity = await skillMirrorApi.me();
+      onIdentityChange?.(identity);
       setNotice('Signed in with a secure session cookie.');
     });
   };
@@ -262,7 +277,7 @@ export default function ApiWorkspace() {
   const pendingAttempts = attempts.filter((attempt) => attempt.verificationStatus === 'NEEDS_REVIEW');
 
   return <section className="api-workspace">
-    <header className="api-heading api-heading-connected"><span className="api-heading-mark"><Server size={20} /></span><div><span className="eyebrow">CONNECTED API WORKSPACE</span><h1>Training, persisted on the server.</h1><p>Manage backend records independently from the browser-only prototype.</p></div><div className="api-user-chip"><span>{user.name.slice(0, 1).toUpperCase()}</span><strong>{user.name}</strong><button className="api-inline-button" onClick={() => void run(async () => { await skillMirrorApi.logout(); setUser(null); setProjects([]); setSelected(null); setSession(null); setReport(null); })}><LogOut size={14} /> Sign out</button></div></header>
+    <header className="api-heading api-heading-connected"><span className="api-heading-mark"><Server size={20} /></span><div><span className="eyebrow">CONNECTED API WORKSPACE</span><h1>Training, persisted on the server.</h1><p>Manage backend records independently from the browser-only prototype.</p></div><div className="api-user-chip"><span>{user.name.slice(0, 1).toUpperCase()}</span><strong>{user.name}</strong><button className="api-inline-button" onClick={() => void run(async () => { await skillMirrorApi.logout(); setUser(null); onIdentityChange?.(null); setProjects([]); setSelected(null); setSession(null); setReport(null); })}><LogOut size={14} /> Sign out</button></div></header>
     <div className="api-connection-line"><span className="connection-dot" /> Connected to <code>{API_BASE_URL}</code><span className="api-cookie-label"><ShieldCheck size={14} /> HttpOnly session</span></div>
     <ErrorNotice error={error} />
     {notice && <div className="api-success" role="status"><Check size={16} />{notice}</div>}
@@ -279,7 +294,7 @@ export default function ApiWorkspace() {
           {selected.status !== 'published' && !session && <form className="api-step-form" onSubmit={addStep}><div className="api-panel-heading"><h3><Plus size={16} /> Add a practice step</h3><ApiButton type="button" icon={Server} variant="secondary" onClick={generateSample} disabled={busy || !/paper\s+bridge/i.test(`${selected.title} ${selected.description}`)}>Use sample template</ApiButton></div><p className="api-clarifier">The paper-bridge outline is a local template, not AI generation. Review every step before publishing.</p><div className="api-step-form-grid"><label className="api-field">Step title<input required maxLength={120} value={newStep.title} onChange={(event) => setNewStep({ ...newStep, title: event.target.value })} /></label><label className="api-field">Instructions<textarea required maxLength={2000} rows={2} value={newStep.instructions} onChange={(event) => setNewStep({ ...newStep, instructions: event.target.value })} /></label><label className="api-field">Expected result<input maxLength={1000} value={newStep.expected} onChange={(event) => setNewStep({ ...newStep, expected: event.target.value })} /></label><label className="api-field">Self-check<input maxLength={1000} value={newStep.verification} onChange={(event) => setNewStep({ ...newStep, verification: event.target.value })} /></label></div><ApiButton icon={Plus} disabled={busy}>Save step</ApiButton></form>}
           {session && <section className="api-session-panel"><div className="api-session-heading"><div><span className="eyebrow">LEARNER SESSION</span><h3>{session.status === 'COMPLETED' ? 'Session complete' : `Step ${session.currentPosition + 1} of ${selected.steps.length}`}</h3></div><span className="api-state-chip">{session.status.toLowerCase().replace('_', ' ')}</span></div>
             {currentStep ? <><div className="api-current-step"><strong>{currentStep.title}</strong><p>{currentStep.instructions}</p>{currentStep.expected && <small>Look for: {currentStep.expected}</small>}</div><div className="api-learner-actions"><button className="icon-button bordered-icon" aria-label="Previous step" disabled={session.currentPosition === 0 || busy} onClick={() => goToPosition(session.currentPosition - 1)}><ArrowLeft size={16} /></button><label className="api-evidence-control"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setEvidenceFile(event.target.files?.[0] || null)} /><FileImage size={16} /><span>{evidenceFile ? evidenceFile.name : 'Attach evidence'}</span><Upload size={14} /></label><ApiButton icon={Check} onClick={submitAttempt} disabled={busy}>Submit for review</ApiButton><button className="icon-button bordered-icon" aria-label="Next step" disabled={session.currentPosition >= selected.steps.length - 1 || busy} onClick={() => goToPosition(session.currentPosition + 1)}><ArrowRight size={16} /></button></div><p className="api-clarifier"><CircleHelp size={14} /> Evidence is stored privately. Submission requests human review; the backend does not run computer vision.</p></> : <p className="api-clarifier"><ShieldCheck size={15} /> Completion requires an instructor-reviewed pass for every step.</p>}
-            {attempts.length > 0 && <div className="api-attempts"><div className="api-panel-heading"><div><span className="eyebrow">RECORDED ATTEMPTS</span><h3>{attempts.length} submitted</h3></div><button className="api-inline-button" onClick={loadReport}>Refresh report</button></div>{attempts.map((attempt) => <article className="api-attempt-row" key={attempt.id}><div><strong>{attempt.step.title} · attempt {attempt.attemptNumber}</strong><span>{attempt.verificationStatus.toLowerCase().replaceAll('_', ' ')} · {attempt.evidence.length} evidence files</span><p>{attempt.feedback}</p></div>{pendingAttempts.some((item) => item.id === attempt.id) && selected.ownerId === user.id && <div className="api-review-buttons"><button onClick={() => reviewAttempt(attempt.id, 'PASSED')} disabled={busy}>Pass</button><button onClick={() => reviewAttempt(attempt.id, 'NEEDS_IMPROVEMENT')} disabled={busy}>Needs work</button><button onClick={() => reviewAttempt(attempt.id, 'UNABLE_TO_VERIFY')} disabled={busy}>Unable</button></div>}</article>)}<div className="api-session-footer"><ApiButton variant="secondary" onClick={completeSession} disabled={busy || session.status === 'COMPLETED'}>Complete reviewed session</ApiButton><ApiButton variant="secondary" onClick={loadReport}>Get report</ApiButton></div></div>}
+            {attempts.length > 0 && <div className="api-attempts"><div className="api-panel-heading"><div><span className="eyebrow">RECORDED ATTEMPTS</span><h3>{attempts.length} submitted</h3></div><button className="api-inline-button" onClick={loadReport}>Refresh report</button></div>{attempts.map((attempt) => <article className="api-attempt-row" key={attempt.id}><div><strong>{attempt.step?.title || selected.steps.find((step) => step.id === attempt.stepId)?.title || 'Training step'} · attempt {attempt.attemptNumber}</strong><span>{attempt.verificationStatus.toLowerCase().replaceAll('_', ' ')} · {attempt.evidence.length} evidence files</span><p>{attempt.feedback}</p></div>{pendingAttempts.some((item) => item.id === attempt.id) && selected.ownerId === user.id && <div className="api-review-buttons"><button onClick={() => reviewAttempt(attempt.id, 'PASSED')} disabled={busy}>Pass</button><button onClick={() => reviewAttempt(attempt.id, 'NEEDS_IMPROVEMENT')} disabled={busy}>Needs work</button><button onClick={() => reviewAttempt(attempt.id, 'UNABLE_TO_VERIFY')} disabled={busy}>Unable</button></div>}</article>)}<div className="api-session-footer"><ApiButton variant="secondary" onClick={completeSession} disabled={busy || session.status === 'COMPLETED'}>Complete reviewed session</ApiButton><ApiButton variant="secondary" onClick={loadReport}>Get report</ApiButton></div></div>}
             {report && <div className="api-report"><span className="eyebrow">ASSESSMENT REPORT · {report.assessmentMethod}</span><strong>{report.passedSteps} of {report.totalSteps} steps reviewed as passed ({report.completionPercentage}%).</strong><p>{report.pendingSteps} awaiting review · {report.stepsNeedingImprovement} need improvement.</p>{report.recommendations.map((recommendation) => <small key={recommendation}>{recommendation}</small>)}</div>}
           </section>}
         </>}

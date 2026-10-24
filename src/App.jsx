@@ -6,8 +6,10 @@ import {
   Search, Server, Settings2, ShieldCheck, Sparkles, Trash2, Upload, Users, X,
 } from 'lucide-react';
 import ApiWorkspace from './ApiWorkspace.jsx';
+import { FactoryOwnerDashboard as LiveOwnerDashboard, WorkersPage as LiveWorkersPage, FactoryReportsPage as LiveReportsPage, WorkerPortal as LiveWorkerPortal } from './FactoryPages.jsx';
 import { createBlankTraining, createId, createSampleSteps, EXAMPLE_ID, EXAMPLE_TRAINING } from './data.js';
 import { readStore, writeStore } from './persistence.js';
+import { skillMirrorApi } from './apiClient.js';
 
 const OWNER_NAV_ITEMS = [
   { path: '/dashboard', label: 'Overview', icon: Gauge },
@@ -281,6 +283,7 @@ function WorkerAssignmentsPage() {
 function App() {
   const [route, setRoute] = useState(routeFromHash);
   const [role, setRole] = useState('owner');
+  const [identity, setIdentity] = useState(null);
   const [store, setStore] = useState(() => readStore().data);
   const [recoveredData, setRecoveredData] = useState(() => readStore().recovered);
   const [storageError, setStorageError] = useState(false);
@@ -293,6 +296,20 @@ function App() {
     if (!window.location.hash) navigate('/dashboard');
     return () => window.removeEventListener('hashchange', updateRoute);
   }, []);
+
+  const updateIdentity = React.useCallback((value) => {
+    setIdentity(value);
+    if (!value) { setRole('owner'); return; }
+    const canOwn = (value.memberships || []).some((membership) => membership.role === 'OWNER');
+    const canWork = (value.workerProfiles || []).length > 0;
+    setRole(canOwn ? 'owner' : canWork ? 'worker' : 'owner');
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    skillMirrorApi.me().then((result) => { if (active) updateIdentity(result); }).catch(() => {});
+    return () => { active = false; };
+  }, [updateIdentity]);
 
   useEffect(() => {
     setStorageError(!writeStore(store));
@@ -321,10 +338,10 @@ function App() {
   const showToast = (message) => setToast(message);
 
   const renderScreen = () => {
-    if (route.view === 'workers') return <WorkersPage />;
-    if (route.view === 'reports') return <FactoryReportsPage />;
-    if (route.view === 'assignments') return <WorkerAssignmentsPage />;
-    if (route.view === 'dashboard') return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
+    if (route.view === 'workers') return <LiveWorkersPage />;
+    if (route.view === 'reports') return <LiveReportsPage />;
+    if (route.view === 'assignments') return <LiveWorkerPortal />;
+    if (route.view === 'dashboard') return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal />;
     if (route.view === 'create') {
       const project = route.id ? store.projects.find((item) => item.id === route.id) : null;
       return <Builder key={route.id || 'new'} initialProject={project} onSave={saveProject} onToast={showToast} />;
@@ -340,8 +357,8 @@ function App() {
     }
     if (route.view === 'library') return <Library projects={store.projects} />;
     if (route.view === 'progress') return <Progress projects={store.projects} sessions={store.sessions} />;
-    if (route.view === 'api') return <ApiWorkspace />;
-    return role === 'owner' ? <FactoryOwnerDashboard /> : <WorkerPortal />;
+    if (route.view === 'api') return <ApiWorkspace initialSessionId={route.id} onIdentityChange={updateIdentity} />;
+    return role === 'owner' ? <LiveOwnerDashboard /> : <LiveWorkerPortal />;
   };
 
   const focused = ['learn', 'report'].includes(route.view);
@@ -356,10 +373,7 @@ function App() {
           <span className="brand-copy"><strong>SkillMirror AI</strong><small>{role === 'owner' ? 'Factory operations' : 'Worker learning'}</small></span>
         </a>
         <div className="workspace-label">WORKSPACE</div>
-        <div className="role-switch" aria-label="Workspace role switch">
-          <button className={role === 'owner' ? 'active' : ''} onClick={() => setRole('owner')}>Owner</button>
-          <button className={role === 'worker' ? 'active' : ''} onClick={() => setRole('worker')}>Worker</button>
-        </div>
+        {identity && (identity.memberships || []).some((membership) => membership.role === 'OWNER') && (identity.workerProfiles || []).length > 0 && <div className="role-switch" aria-label="Workspace role switch"><button className={role === 'owner' ? 'active' : ''} onClick={() => setRole('owner')}>Owner</button><button className={role === 'worker' ? 'active' : ''} onClick={() => setRole('worker')}>Worker</button></div>}
         <nav className="primary-nav" aria-label="Main navigation">
           {navItems.map(({ path, label, icon: Icon }) => (
             <a key={path} href={`#${path}`} className={`nav-link ${route.view === path.slice(1) ? 'nav-link-active' : ''}`}>
