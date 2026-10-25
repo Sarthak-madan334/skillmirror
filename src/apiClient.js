@@ -1,5 +1,6 @@
 const configuredBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim();
-export const API_BASE_URL = (configuredBaseUrl || 'http://localhost:8000').replace(/\/$/, '');
+const productionBuild = Boolean(import.meta.env?.PROD);
+export const API_BASE_URL = (configuredBaseUrl || (productionBuild ? '' : 'http://localhost:8000')).replace(/\/$/, '');
 export const hasConfiguredApiUrl = Boolean(configuredBaseUrl);
 
 export class ApiClientError extends Error {
@@ -13,6 +14,9 @@ export class ApiClientError extends Error {
 }
 
 async function request(path, options = {}) {
+  if (productionBuild && !hasConfiguredApiUrl) {
+    throw new ApiClientError(0, 'API_URL_NOT_CONFIGURED', 'VITE_API_BASE_URL is missing from this production build. Configure the deployed API URL and rebuild the frontend.');
+  }
   const headers = new Headers(options.headers || {});
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   if (options.body !== undefined && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
