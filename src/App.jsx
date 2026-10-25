@@ -2,39 +2,44 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BadgeCheck, BarChart3, BookOpen, Check, CheckCircle2,
   ChevronDown, CircleHelp, Clock3, Copy, FileVideo2, FlaskConical, FolderOpen, Gauge,
-  ImagePlus, Layers3, ListChecks, Menu, MoreHorizontal, Play, Plus, RotateCcw, Save,
+  ImagePlus, Layers3, ListChecks, LogOut, Menu, MoreHorizontal, Play, Plus, RotateCcw, Save,
   Search, Server, Settings2, ShieldCheck, Sparkles, Trash2, Upload, Users, X,
 } from 'lucide-react';
 import ApiWorkspace from './ApiWorkspace.jsx';
-import { FactoryOwnerDashboard as LiveOwnerDashboard, WorkersPage as LiveWorkersPage, FactoryReportsPage as LiveReportsPage, WorkerPortal as LiveWorkerPortal } from './FactoryPages.jsx';
+import { skillMirrorApi } from './apiClient.js';
+import { FactoryOwnerDashboard, FactoryReportsPage, OwnerAssignmentsPage, ReviewsPage, TrainingManagementPage, WorkerDetailPage, WorkerPortal, WorkerProgressPage, WorkersPage } from './FactoryPages.jsx';
 import { createBlankTraining, createId, createSampleSteps, EXAMPLE_ID, EXAMPLE_TRAINING } from './data.js';
 import { readStore, writeStore } from './persistence.js';
-import { skillMirrorApi } from './apiClient.js';
 
 const OWNER_NAV_ITEMS = [
   { path: '/dashboard', label: 'Overview', icon: Gauge },
   { path: '/workers', label: 'Workers', icon: Users },
+  { path: '/training', label: 'Training', icon: Layers3 },
+  { path: '/reviews', label: 'Reviews', icon: BadgeCheck },
   { path: '/reports', label: 'Reports', icon: BarChart3 },
-  { path: '/library', label: 'Training', icon: Layers3 },
   { path: '/api', label: 'API workspace', icon: Server },
 ];
 
 const WORKER_NAV_ITEMS = [
-  { path: '/dashboard', label: 'Overview', icon: Gauge },
-  { path: '/assignments', label: 'Assignments', icon: BookOpen },
-  { path: '/progress', label: 'Progress', icon: ListChecks },
-  { path: '/library', label: 'Library', icon: Layers3 },
+  { path: '/assignments', label: 'My Training', icon: BookOpen },
+  { path: '/progress', label: 'My Progress', icon: ListChecks },
 ];
 
-const NAV_ITEMS = OWNER_NAV_ITEMS;
+const DEMO_NAV_ITEMS = [
+  { path: '/dashboard', label: 'Practice', icon: Gauge },
+  { path: '/library', label: 'Training', icon: Layers3 },
+  { path: '/progress', label: 'Progress', icon: ListChecks },
+];
 
 function routeFromHash() {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  return { view: segments[0] || 'dashboard', id: segments[1] || '', step: segments.length > 2 ? Number(segments[2]) : null };
+  const demo = segments[0] === 'demo';
+  if (demo) segments.shift();
+  return { view: segments[0] || 'dashboard', id: segments[1] || '', step: segments.length > 2 ? Number(segments[2]) : null, demo };
 }
 
 function navigate(path) {
-  window.location.hash = path;
+  window.location.hash = `${routeFromHash().demo ? '/demo' : ''}${path}`;
 }
 
 function Button({ children, icon: Icon, variant = 'primary', className = '', ...props }) {
@@ -59,236 +64,101 @@ function PageHeading({ eyebrow, title, description, action }) {
   );
 }
 
-function FactoryOwnerDashboard() {
-  const metrics = [
-    { label: 'Total workers', value: '48', tone: 'blue', detail: 'Active in the plant', icon: Users },
-    { label: 'In progress', value: '12', tone: 'amber', detail: 'Assignments underway', icon: Clock3 },
-    { label: 'Verified competencies', value: '131', tone: 'green', detail: 'Approved skills on file', icon: BadgeCheck },
-    { label: 'Pending reviews', value: '7', tone: 'red', detail: 'Needs owner sign-off', icon: ShieldCheck },
-  ];
-  const activity = [
-    { title: 'Alicia Grant started the CNC safety module', time: '12 minutes ago', tone: 'info' },
-    { title: 'Equipment calibration training was marked for review', time: '1 hour ago', tone: 'warn' },
-    { title: 'Mason Lee completed the line changeover assessment', time: 'Today', tone: 'success' },
-  ];
-  const attention = [
-    'Two workers still need their PPE induction sign-out.',
-    'Three practical checkpoints were submitted and waiting for review.',
-    'One maintenance assignment is due tomorrow.',
-  ];
-
-  return (
-    <div className="factory-shell">
-      <PageHeading
-        eyebrow="FACTORY OVERVIEW"
-        title="Operational training at a glance."
-        description="Monitor progress, verify demonstrated skills, and keep the workforce aligned to current procedures."
-        action={<Button icon={Plus}>Assign training</Button>}
-      />
-
-      <div className="factory-topbar card-panel">
-        <div>
-          <span className="eyebrow">Northline Manufacturing</span>
-          <h2>Production readiness overview</h2>
-        </div>
-        <div className="factory-actions">
-          <button className="outline-button">Add worker</button>
-          <Button icon={Plus}>Assign training</Button>
-        </div>
-      </div>
-
-      <div className="metric-grid">
-        {metrics.map(({ label, value, tone, detail, icon: Icon }) => (
-          <div key={label} className={`metric-card ${tone}`}>
-            <div className="metric-icon-wrap">
-              <Icon size={18} />
-            </div>
-            <div>
-              <span>{label}</span>
-              <strong>{value}</strong>
-              <small>{detail}</small>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="factory-grid">
-        <section className="card-panel">
-          <div className="panel-title-row">
-            <div>
-              <span className="eyebrow">RECENT ACTIVITY</span>
-              <h3>Recent updates</h3>
-            </div>
-          </div>
-          <ul className="activity-list">
-            {activity.map((item) => (
-              <li key={item.title} className={`activity-item ${item.tone}`}>
-                <span className="dot" />
-                <div>
-                  <strong>{item.title}</strong>
-                  <small>{item.time}</small>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="card-panel">
-          <div className="panel-title-row">
-            <div>
-              <span className="eyebrow">ATTENTION REQUIRED</span>
-              <h3>Priority follow-ups</h3>
-            </div>
-          </div>
-          <ul className="attention-list">
-            {attention.map((item) => (
-              <li key={item}><ShieldCheck size={14} /> {item}</li>
-            ))}
-          </ul>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function WorkersPage() {
-  const workers = [
-    { name: 'Alicia Grant', employeeId: 'NW-2148', department: 'CNC', training: 'Safety induction', status: 'In progress', competence: '3 of 5 checks', review: '2 pending', lastActivity: '2 hours ago' },
-    { name: 'Mason Lee', employeeId: 'NW-1037', department: 'Assembly', training: 'Line changeover', status: 'Ready to review', competence: '5 of 5 checks', review: '1 pending', lastActivity: 'Today' },
-    { name: 'Rosa Patel', employeeId: 'NW-4411', department: 'Quality', training: 'Inspection standard', status: 'Verified', competence: 'Verified', review: 'None', lastActivity: 'Yesterday' },
-  ];
-
-  return (
-    <div>
-      <PageHeading
-        eyebrow="WORKER MANAGEMENT"
-        title="Factory workforce overview."
-        description="Search workers, review active assignments, and monitor the training path that leads to verified competence."
-        action={<Button icon={Plus}>Add worker</Button>}
-      />
-
-      <div className="card-panel table-panel">
-        <div className="panel-title-row flush">
-          <div>
-            <span className="eyebrow">WORKERS</span>
-            <h3>Active team</h3>
-          </div>
-          <div className="toolbar-actions">
-            <button className="outline-button">Filter</button>
-            <button className="outline-button">Search</button>
-          </div>
-        </div>
-
-        <table className="worker-table">
-          <thead>
-            <tr>
-              <th>Worker</th>
-              <th>Employee ID</th>
-              <th>Department</th>
-              <th>Assigned training</th>
-              <th>Competence</th>
-              <th>Pending review</th>
-              <th>Last activity</th>
-            </tr>
-          </thead>
-          <tbody>
-            {workers.map((worker) => (
-              <tr key={worker.employeeId}>
-                <td>{worker.name}</td>
-                <td>{worker.employeeId}</td>
-                <td>{worker.department}</td>
-                <td>{worker.training}</td>
-                <td><span className="mini-pill success">{worker.competence}</span></td>
-                <td><span className="mini-pill warn">{worker.review}</span></td>
-                <td>{worker.lastActivity}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function FactoryReportsPage() {
-  const summary = [
-    { label: 'Completed assignments', value: '62%', detail: '18 of 29', tone: 'green' },
-    { label: 'Verified competencies', value: '80%', detail: '24 of 30', tone: 'blue' },
-    { label: 'Overdue tasks', value: '4', detail: 'Requires follow-up', tone: 'amber' },
-  ];
-
-  return (
-    <div>
-      <PageHeading
-        eyebrow="REPORTS"
-        title="Factory performance and training health."
-        description="Keep the review focused on completed assignments, verified skills, and overdue operator readiness checks."
-        action={<Button icon={BarChart3}>Export CSV</Button>}
-      />
-
-      <div className="metric-grid">
-        {summary.map(({ label, value, detail, tone }) => (
-          <div key={label} className={`metric-card ${tone}`}>
-            <div className="metric-icon-wrap"><BarChart3 size={18} /></div>
-            <div>
-              <span>{label}</span>
-              <strong>{value}</strong>
-              <small>{detail}</small>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function WorkerPortal() {
-  const assignments = [
-    { title: 'CNC Safety Induction', status: 'In progress', due: 'Due in 3 days', actions: 'Continue' },
-    { title: 'Line Changeover Basics', status: 'Needs review', due: 'Evidence submitted', actions: 'Review' },
-    { title: 'Inspection Standard', status: 'Ready', due: 'Due in 6 days', actions: 'Start' },
-  ];
-
-  return (
-    <div>
-      <PageHeading
-        eyebrow="WORKER PORTAL"
-        title="Your assigned training."
-        description="Complete the required steps, submit evidence, and keep your practical skill records current."
-      />
-
-      <div className="worker-portal-grid">
-        {assignments.map((assignment) => (
-          <div key={assignment.title} className="card-panel assignment-card">
-            <div className="panel-title-row compact">
-              <div>
-                <span className="eyebrow">ASSIGNMENT</span>
-                <h3>{assignment.title}</h3>
-              </div>
-              <span className="mini-pill neutral">{assignment.status}</span>
-            </div>
-            <p>{assignment.due}</p>
-            <button className="outline-button full">{assignment.actions}</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function WorkerAssignmentsPage() {
-  return <WorkerPortal />;
-}
-
 function App() {
   const [route, setRoute] = useState(routeFromHash);
-  const [role, setRole] = useState('owner');
+  const [authState, setAuthState] = useState('initializing');
+  const [role, setRole] = useState(null);
   const [identity, setIdentity] = useState(null);
+  const [memberships, setMemberships] = useState([]);
+  const [workerProfiles, setWorkerProfiles] = useState([]);
+  const [organizations, setOrganizations] = useState([]);
+  const [organizationId, setOrganizationId] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
+  const [authMode, setAuthMode] = useState('login');
+  const [login, setLogin] = useState({ email: '', password: '' });
+  const [registerName, setRegisterName] = useState('');
+  const [invitationToken, setInvitationToken] = useState('');
+  const [organizationName, setOrganizationName] = useState('');
   const [store, setStore] = useState(() => readStore().data);
   const [recoveredData, setRecoveredData] = useState(() => readStore().recovered);
   const [storageError, setStorageError] = useState(false);
   const [toast, setToast] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const loadIdentity = async () => {
+    setAuthState('initializing');
+    setAuthError('');
+    try {
+      const session = await skillMirrorApi.me();
+      const ownerMemberships = session.memberships.filter((membership) => membership.role === 'OWNER');
+      const workerProfiles = session.workerProfiles || [];
+      const nextRole = ownerMemberships.length ? 'owner' : workerProfiles.length ? 'worker' : 'unassigned';
+      const ownerOrgs = ownerMemberships.length ? (await skillMirrorApi.listOrganizations()).organizations : [];
+      setIdentity(session.user);
+      setMemberships(session.memberships);
+      setWorkerProfiles(workerProfiles);
+      setOrganizations(ownerOrgs);
+      setOrganizationId((current) => ownerOrgs.some((item) => item.id === current) ? current : ownerOrgs[0]?.id || '');
+      setRole(nextRole);
+      setAuthState('authenticated');
+    } catch (error) {
+      setIdentity(null);
+      setMemberships([]);
+      setWorkerProfiles([]);
+      setRole(null);
+      setOrganizations([]);
+      setOrganizationId('');
+      if (error.status === 401) setAuthState('unauthenticated');
+      else { setAuthState('error'); setAuthError(error.message || 'The API could not be reached.'); }
+    }
+  };
+
+  useEffect(() => { loadIdentity(); }, []);
+
+  const signIn = async (event) => {
+    event.preventDefault();
+    setAuthState('initializing');
+    setAuthError('');
+    try {
+      if (authMode === 'register') {
+        await skillMirrorApi.register({ name: registerName, ...login });
+        setAuthMode('login');
+        setAuthNotice('Account request accepted. Sign in with the invited email to continue.');
+        setAuthState('unauthenticated');
+        return;
+      }
+      await skillMirrorApi.login(login);
+      await loadIdentity();
+    } catch (error) {
+      setAuthState('unauthenticated');
+      setAuthError(error.message || 'Sign-in failed.');
+    }
+  };
+
+  const acceptInvitation = async (event) => {
+    event.preventDefault();
+    setAuthError('');
+    try {
+      await skillMirrorApi.acceptWorkerInvitation(invitationToken.trim());
+      setInvitationToken('');
+      await loadIdentity();
+    } catch (error) {
+      setAuthError(error.message || 'This invitation could not be accepted.');
+    }
+  };
+
+  const createOrganization = async (event) => {
+    event.preventDefault();
+    setAuthError('');
+    try {
+      await skillMirrorApi.createOrganization({ name: organizationName });
+      setOrganizationName('');
+      await loadIdentity();
+    } catch (error) {
+      setAuthError(error.message || 'Could not create the organization.');
+    }
+  };
 
   useEffect(() => {
     const updateRoute = () => { setRoute(routeFromHash()); setMobileNavOpen(false); };
@@ -297,23 +167,9 @@ function App() {
     return () => window.removeEventListener('hashchange', updateRoute);
   }, []);
 
-  const updateIdentity = React.useCallback((value) => {
-    setIdentity(value);
-    if (!value) { setRole('owner'); return; }
-    const canOwn = (value.memberships || []).some((membership) => membership.role === 'OWNER');
-    const canWork = (value.workerProfiles || []).length > 0;
-    setRole(canOwn ? 'owner' : canWork ? 'worker' : 'owner');
-  }, []);
-
   useEffect(() => {
-    let active = true;
-    skillMirrorApi.me().then((result) => { if (active) updateIdentity(result); }).catch(() => {});
-    return () => { active = false; };
-  }, [updateIdentity]);
-
-  useEffect(() => {
-    setStorageError(!writeStore(store));
-  }, [store]);
+    if (route.demo) setStorageError(!writeStore(store));
+  }, [route.demo, store]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -326,7 +182,7 @@ function App() {
     return store.projects.find((project) => project.id === route.id) ?? null;
   }, [route.id, store.projects]);
 
-  const navItems = role === 'owner' ? OWNER_NAV_ITEMS : WORKER_NAV_ITEMS;
+  const navItems = route.demo ? DEMO_NAV_ITEMS : role === 'owner' ? OWNER_NAV_ITEMS.filter((item) => item.path !== '/api') : WORKER_NAV_ITEMS;
 
   const saveProject = (project) => {
     setStore((current) => ({
@@ -338,14 +194,32 @@ function App() {
   const showToast = (message) => setToast(message);
 
   const renderScreen = () => {
-    // Keep the working prototype visible until the API confirms an authenticated
-    // identity. An unavailable or misconfigured API must not blank the main UI.
-    if (route.view === 'workers') return identity ? <LiveWorkersPage /> : <WorkersPage />;
-    if (route.view === 'reports') return identity ? <LiveReportsPage /> : <FactoryReportsPage />;
-    if (route.view === 'assignments') return identity ? <LiveWorkerPortal onIdentityChange={updateIdentity} /> : <WorkerAssignmentsPage />;
+    if (route.demo) {
+      if (route.view === 'dashboard') return <Dashboard projects={store.projects} sessions={store.sessions} />;
+      if (route.view === 'create') return <Builder key={route.id || 'new'} initialProject={store.projects.find((item) => item.id === route.id) || null} onSave={saveProject} onToast={showToast} />;
+      if (route.view === 'detail' && activeProject) return <TrainingDetail project={activeProject} store={store} onDuplicate={(copy) => { saveProject(copy); navigate(`/create/${copy.id}`); }} />;
+      if (route.view === 'learn' && activeProject) return <LearnerMode project={activeProject} routeStep={route.step} store={store} setStore={setStore} />;
+      if (route.view === 'report' && activeProject) return <AssessmentReport project={activeProject} store={store} />;
+      if (route.view === 'library') return <Library projects={store.projects} />;
+      if (route.view === 'progress') return <Progress projects={store.projects} sessions={store.sessions} />;
+      return <Dashboard projects={store.projects} sessions={store.sessions} />;
+    }
+    if (role === 'owner' && !organizationId) return <form className="card-panel form-stack" onSubmit={createOrganization}><h1>Create your factory</h1><p>Your account has no organization yet.</p><label>Factory name<input required value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} /></label>{authError && <p role="alert">{authError}</p>}<button className="button button-primary" type="submit">Create factory</button></form>;
+    if (role === 'owner' && route.view === 'workers' && route.id) return <WorkerDetailPage organization={organizations.find((item) => item.id === organizationId)} workerId={route.id} />;
+    if (role === 'owner' && route.view === 'workers') return <WorkersPage organization={organizations.find((item) => item.id === organizationId)} />;
+    if (role === 'owner' && route.view === 'training' && route.id) return <FactoryTrainingRoute organization={organizations.find((item) => item.id === organizationId)} trainingId={route.id} onToast={showToast} />;
+    if (role === 'owner' && route.view === 'training') return <TrainingManagementPage organization={organizations.find((item) => item.id === organizationId)} onNavigate={navigate} />;
+    if (role === 'owner' && route.view === 'assignments') return <OwnerAssignmentsPage organization={organizations.find((item) => item.id === organizationId)} />;
+    if (role === 'owner' && route.view === 'reviews') return <ReviewsPage organization={organizations.find((item) => item.id === organizationId)} />;
+    if (role === 'owner' && route.view === 'reports') return <FactoryReportsPage organization={organizations.find((item) => item.id === organizationId)} />;
+    if (route.view === 'assignments' && role === 'worker') return <WorkerPortal />;
+    if (route.view === 'progress' && role === 'worker') return <WorkerProgressPage />;
+    if (route.view === 'progress') return <section className="card-panel"><h1>Standalone practice demo</h1><p>Browser progress is separate from factory and worker records.</p><a href="#/demo/progress">Open demo progress</a></section>;
+    if (['create', 'detail', 'learn', 'report', 'library', 'progress'].includes(route.view)) return <section className="card-panel"><h1>Standalone practice demo</h1><p>Browser-saved practice is separate from factory and worker records.</p><a href="#/demo/dashboard">Open the standalone demo</a></section>;
     if (route.view === 'dashboard') return role === 'owner'
-      ? (identity ? <LiveOwnerDashboard /> : <FactoryOwnerDashboard />)
-      : (identity ? <LiveWorkerPortal onIdentityChange={updateIdentity} /> : <WorkerPortal />);
+      ? <FactoryOwnerDashboard organization={organizations.find((item) => item.id === organizationId)} onNavigate={navigate} />
+      : role === 'worker' ? <WorkerPortal /> : <div className="card-panel">Your account does not have a factory or worker membership.</div>;
+    if (role !== 'owner' && ['workers', 'worker', 'reports', 'api'].includes(route.view)) return <div className="card-panel" role="alert">You do not have permission to view this page.</div>;
     if (route.view === 'create') {
       const project = route.id ? store.projects.find((item) => item.id === route.id) : null;
       return <Builder key={route.id || 'new'} initialProject={project} onSave={saveProject} onToast={showToast} />;
@@ -361,14 +235,17 @@ function App() {
     }
     if (route.view === 'library') return <Library projects={store.projects} />;
     if (route.view === 'progress') return <Progress projects={store.projects} sessions={store.sessions} />;
-    if (route.view === 'api') return <ApiWorkspace initialSessionId={route.id} onIdentityChange={updateIdentity} />;
-    return role === 'owner'
-      ? (identity ? <LiveOwnerDashboard /> : <FactoryOwnerDashboard />)
-      : (identity ? <LiveWorkerPortal onIdentityChange={updateIdentity} /> : <WorkerPortal />);
+    if (route.view === 'api' && role === 'owner') return <ApiWorkspace initialSessionId={route.id} onIdentityChange={loadIdentity} />;
+    return role === 'owner' ? <FactoryOwnerDashboard organization={organizations.find((item) => item.id === organizationId)} onNavigate={navigate} /> : <WorkerPortal />;
   };
 
+  if (!route.demo && authState === 'initializing') return <main className="focused-shell"><p role="status">Checking your SkillMirror session...</p></main>;
+  if (!route.demo && authState === 'error') return <main className="focused-shell"><section className="card-panel"><h1>SkillMirror is unavailable</h1><p>{authError}</p><button className="button button-primary" onClick={loadIdentity}>Retry connection</button></section></main>;
+  if (!route.demo && authState === 'unauthenticated') return <main className="focused-shell"><form className="card-panel form-stack" onSubmit={signIn}><h1>{authMode === 'login' ? 'Sign in to SkillMirror' : 'Create an account'}</h1><p>Use your invited email to access factory or worker training records.</p>{authNotice && <p role="status">{authNotice}</p>}{authMode === 'register' && <label>Name<input autoComplete="name" required value={registerName} onChange={(event) => setRegisterName(event.target.value)} /></label>}<label>Email<input type="email" autoComplete="username" required value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} /></label><label>Password<input type="password" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} required minLength={authMode === 'login' ? 1 : 12} value={login.password} onChange={(event) => setLogin({ ...login, password: event.target.value })} />{authMode === 'register' && <small>At least 12 characters, including uppercase, lowercase, and a number.</small>}</label>{authError && <p role="alert">{authError}</p>}<button className="button button-primary" type="submit">{authMode === 'login' ? 'Sign in' : 'Create account'}</button><button className="text-button" type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}>{authMode === 'login' ? 'Create an account' : 'Back to sign in'}</button><p><a href="#/demo/dashboard">Open standalone browser demo</a></p></form></main>;
+  if (!route.demo && authState === 'authenticated' && role === 'unassigned') return <main className="focused-shell"><section className="card-panel"><h1>No factory access yet</h1><p>Your account has no factory membership. Accept a worker invitation or create a factory as its owner.</p><form className="form-stack" onSubmit={acceptInvitation}><label>Worker invitation token<input required minLength={32} value={invitationToken} onChange={(event) => setInvitationToken(event.target.value)} /></label><button className="button button-secondary" type="submit">Accept invitation</button></form><form className="form-stack" onSubmit={createOrganization}><label>Create a factory as its owner<input required value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} /></label>{authError && <p role="alert">{authError}</p>}<button className="button button-primary" type="submit">Create factory</button></form><button className="text-button" onClick={() => skillMirrorApi.logout().then(loadIdentity)}>Sign out</button></section></main>;
+
   const focused = ['learn', 'report'].includes(route.view);
-  if (focused) return <main className="focused-shell">{renderScreen()}{toast && <div className="toast" role="status">{toast}</div>}</main>;
+  if (focused) return <main className="focused-shell">{route.demo && <div className="notice notice-warning" role="status">Standalone demo data. Changes stay in this browser and never update factory records.</div>}{renderScreen()}{toast && <div className="toast" role="status">{toast}</div>}</main>;
 
   return (
     <div className="app-shell">
@@ -379,10 +256,11 @@ function App() {
           <span className="brand-copy"><strong>SkillMirror AI</strong><small>{role === 'owner' ? 'Factory operations' : 'Worker learning'}</small></span>
         </a>
         <div className="workspace-label">WORKSPACE</div>
-        {identity && (identity.memberships || []).some((membership) => membership.role === 'OWNER') && (identity.workerProfiles || []).length > 0 && <div className="role-switch" aria-label="Workspace role switch"><button className={role === 'owner' ? 'active' : ''} onClick={() => setRole('owner')}>Owner</button><button className={role === 'worker' ? 'active' : ''} onClick={() => setRole('worker')}>Worker</button></div>}
+        {memberships.some((membership) => membership.role === 'OWNER') && workerProfiles.length > 0 && <div className="role-switch" aria-label="Workspace role switch"><button className={role === 'owner' ? 'active' : ''} onClick={() => setRole('owner')}>Owner</button><button className={role === 'worker' ? 'active' : ''} onClick={() => setRole('worker')}>Worker</button></div>}
+        {role === 'owner' && organizations.length > 1 && <label className="organization-select"><span>Factory</span><select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>{organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         <nav className="primary-nav" aria-label="Main navigation">
           {navItems.map(({ path, label, icon: Icon }) => (
-            <a key={path} href={`#${path}`} className={`nav-link ${route.view === path.slice(1) ? 'nav-link-active' : ''}`}>
+            <a key={path} href={`#${route.demo ? '/demo' : ''}${path}`} className={`nav-link ${route.view === path.slice(1) ? 'nav-link-active' : ''}`}>
               <Icon size={18} strokeWidth={1.8} aria-hidden="true" /><span>{label}</span>
               {path === '/library' && store.projects.length > 0 && <span className="nav-count">{store.projects.length}</span>}
             </a>
@@ -391,13 +269,13 @@ function App() {
         <div className="sidebar-spacer" />
         <div className="sidebar-note">
           <div className="sidebar-note-icon"><ShieldCheck size={18} /></div>
-          <strong>{role === 'owner' ? 'Owner-only controls' : 'Practice-first workflow'}</strong>
-          <p>{role === 'owner' ? 'Review assigned training, evidence, and competency approvals.' : 'Stay focused on the current assignment and required checks.'}</p>
+          <strong>{role === 'owner' ? 'Owner-only controls' : 'Assigned training'}</strong>
+          <p>{role === 'owner' ? 'Manage records for your authorized factory.' : 'View training assigned to your worker account.'}</p>
         </div>
         <div className="profile-row">
-          <div className="avatar">{role === 'owner' ? 'FO' : 'WL'}</div>
-          <div className="profile-copy"><strong>{role === 'owner' ? 'Factory owner' : 'Worker profile'}</strong><small>{role === 'owner' ? 'Northline Manufacturing' : 'Ready for learning'}</small></div>
-          <Settings2 size={17} aria-hidden="true" />
+          <div className="avatar">{identity?.name?.slice(0, 2).toUpperCase()}</div>
+          <div className="profile-copy"><strong>{identity?.name}</strong><small>{identity?.email}</small></div>
+          <button className="icon-button" aria-label="Sign out" title="Sign out" onClick={async () => { await skillMirrorApi.logout(); setAuthState('unauthenticated'); setRole(null); }}><Settings2 size={17} aria-hidden="true" /></button>
         </div>
       </aside>
       {mobileNavOpen && <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
@@ -407,18 +285,21 @@ function App() {
           <button className="mobile-menu icon-button" aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileNavOpen} aria-controls="main-sidebar" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
             {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
-          <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{navItems.find((item) => item.path === `/${route.view}`)?.label ?? (route.view === 'create' ? 'Create training' : 'Overview')}</strong></div>
-          <div className="topbar-actions"><button className="top-search" aria-label="Search training" onClick={() => navigate('/library')}><Search size={17} /><span>Find training</span><kbd>/</kbd></button>{route.view !== 'api' && <Button icon={Plus} onClick={() => navigate('/create')}>Create training</Button>}</div>
+          <div className="breadcrumb"><span>{route.demo ? 'Standalone demo' : 'Workspace'}</span><span className="breadcrumb-slash">/</span><strong>{navItems.find((item) => item.path === `/${route.view}`)?.label ?? (route.view === 'create' ? 'Create training' : 'Overview')}</strong></div>
+          <div className="topbar-actions">{route.demo && <Button icon={Plus} onClick={() => navigate('/create')}>Create training</Button>}</div>
         </header>
         <main className="content-area">
+          {route.demo && <div className="notice notice-warning" role="status">Standalone demo data. Changes stay in this browser and never update factory records.</div>}
           {recoveredData && <div className="notice notice-warning" role="status"><CircleHelp size={17} /><span>Saved browser data could not be read. A fresh workspace is ready; older data was left untouched.</span><button aria-label="Dismiss" onClick={() => setRecoveredData(false)}><X size={16} /></button></div>}
-          {storageError && <div className="notice notice-warning" role="status"><CircleHelp size={17} /><span>Browser storage is unavailable or full. Changes may not survive a refresh.</span></div>}
+          {route.demo && recoveredData && <div className="notice notice-warning" role="status"><CircleHelp size={17} /><span>Saved browser data could not be read. A fresh demo is ready; older data was left untouched.</span><button aria-label="Dismiss" onClick={() => setRecoveredData(false)}><X size={16} /></button></div>}
+          {route.demo && storageError && <div className="notice notice-warning" role="status"><CircleHelp size={17} /><span>Browser storage is unavailable or full. Demo changes may not survive a refresh.</span></div>}
+                    <button className="icon-button" aria-label="Sign out" title="Sign out" onClick={async () => { await skillMirrorApi.logout(); setAuthState('unauthenticated'); setRole(null); }}><LogOut size={17} aria-hidden="true" /></button>
           {renderScreen()}
         </main>
       </div>
       {toast && <div className="toast" role="status">{toast}</div>}
       <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
-        {navItems.map(({ path, label, icon: Icon }) => <a key={path} href={`#${path}`} className={route.view === path.slice(1) ? 'mobile-nav-active' : ''}><Icon size={19} /><span>{label}</span></a>)}
+        {navItems.map(({ path, label, icon: Icon }) => <a key={path} href={`#${route.demo ? '/demo' : ''}${path}`} className={route.view === path.slice(1) ? 'mobile-nav-active' : ''}><Icon size={19} /><span>{label}</span></a>)}
       </nav>
     </div>
   );
@@ -468,7 +349,7 @@ function Progress({ projects, sessions }) {
 
 const WIZARD_STEPS = ['Describe', 'Demonstration', 'Build steps', 'Review'];
 
-function Builder({ initialProject, onSave, onToast }) {
+function Builder({ initialProject, onSave, onToast, destination = (_result, saved) => `/detail/${saved.id}` }) {
   const [project, setProject] = useState(() => initialProject ? structuredClone(initialProject) : createBlankTraining());
   const [stage, setStage] = useState(0);
   const [errors, setErrors] = useState({});
@@ -497,7 +378,7 @@ function Builder({ initialProject, onSave, onToast }) {
   };
 
   const goNext = () => { if (validateStage()) setStage((current) => Math.min(current + 1, 3)); };
-  const save = (status) => {
+  const save = async (status) => {
     const missingStep = project.steps.some((step) => !step.title.trim() || !step.instructions.trim());
     if (status === 'published' && (!project.title.trim() || !project.description.trim() || !project.steps.length || missingStep)) {
       setStage(!project.title.trim() || !project.description.trim() ? 0 : 2);
@@ -505,9 +386,14 @@ function Builder({ initialProject, onSave, onToast }) {
       return;
     }
     const saved = { ...project, duration: Number(project.duration) || 15, materials: Array.isArray(project.materials) ? project.materials : [], status, updatedAt: new Date().toISOString() };
-    onSave(saved);
-    onToast(status === 'draft' ? 'Draft saved in this browser.' : 'Training published locally and ready to practise.');
-    navigate(`/detail/${saved.id}`);
+    try {
+      const result = await onSave(saved);
+      onToast(status === 'draft' ? 'Draft saved.' : 'Training published.');
+      navigate(destination(result, saved));
+    } catch (error) {
+      setErrors({ save: error.message || 'Could not save this training.' });
+      onToast(error.message || 'Could not save this training.');
+    }
   };
 
   const addStep = () => update('steps', [...project.steps, { id: createId(), title: '', instructions: '', expected: '', verification: '', safety: '', image: '', feedback: '' }]);
@@ -545,6 +431,40 @@ function Builder({ initialProject, onSave, onToast }) {
   };
 
   return <><PageHeading eyebrow={initialProject ? 'EDIT YOUR GUIDE' : 'NEW TRAINING'} title={initialProject ? 'Shape the details.' : 'Let’s make something teachable.'} description="A clear guide starts with one useful skill and a few steps." action={<button className="text-button builder-save-top" onClick={() => save('draft')}><Save size={16} /> Save draft</button>} /><div className="wizard-progress" aria-label={`Step ${stage + 1} of 4`}><div className="wizard-track">{WIZARD_STEPS.map((label, index) => <button key={label} className={`wizard-node ${stage === index ? 'wizard-node-active' : ''} ${stage > index ? 'wizard-node-done' : ''}`} onClick={() => { if (index < stage) setStage(index); else if (index === stage + 1) goNext(); }}><span className="wizard-node-number">{stage > index ? <Check size={14} /> : `0${index + 1}`}</span><span>{label}</span></button>)}</div></div><section className="builder-panel"><div className="builder-panel-heading"><div><span className="eyebrow">STEP {String(stage + 1).padStart(2, '0')} OF 04</span><h2>{['Describe the skill', 'Add a demonstration', 'Make the steps clear', 'Review your guide'][stage]}</h2><p>{['Start with the task and who it is for.', 'Choose a local reference or a sample. This demo does not upload media.', 'Edit each action, expected result, and self-check.', 'Check the details before saving or making this guide available.'][stage]}</p></div>{stage === 2 && <button className="mobile-preview-toggle" onClick={() => setMobilePreview(true)}><BookOpen size={16} /> Preview</button>}</div><div className={`builder-content ${stage === 2 ? 'builder-content-editor' : ''}`}>{stageContent()}</div><div className="builder-footer"><button className="text-button" onClick={() => stage === 0 ? navigate('/dashboard') : setStage(stage - 1)}>{stage === 0 ? <ArrowLeft size={16} /> : <ArrowLeft size={16} />} {stage === 0 ? 'Back to overview' : 'Previous'}</button>{stage < 3 ? <Button icon={ArrowRight} onClick={goNext}>Continue</Button> : <div className="builder-final-actions"><Button variant="secondary" onClick={() => save('draft')}>Save draft</Button><Button icon={Check} onClick={() => save('published')}>Publish locally</Button></div>}</div></section></>;
+}
+
+function FactoryTrainingRoute({ organization, trainingId, onToast }) {
+  const [project, setProject] = useState(trainingId === 'new' ? null : undefined);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (trainingId === 'new') return undefined;
+    let active = true;
+    skillMirrorApi.getTraining(trainingId).then((training) => {
+      if (active) setProject(training);
+    }).catch((cause) => { if (active) setError(cause.message || 'Could not load this procedure.'); });
+    return () => { active = false; };
+  }, [trainingId]);
+
+  if (project === undefined) return <p role="status">Loading procedure...</p>;
+  if (error) return <div className="card-panel" role="alert"><p>{error}</p><button className="outline-button" onClick={() => window.location.reload()}>Retry</button></div>;
+  const saveProcedure = async (procedure) => {
+    const payload = {
+      title: procedure.title,
+      description: procedure.description,
+      category: procedure.category,
+      level: procedure.level,
+      duration: procedure.duration,
+      objectives: procedure.objectives,
+      materials: procedure.materials,
+      status: procedure.status,
+      demonstration: procedure.demonstration,
+      steps: procedure.steps.map(({ id: _id, position: _position, ...step }) => step),
+    };
+    return trainingId === 'new'
+      ? skillMirrorApi.createOrganizationTraining(organization.id, payload)
+      : skillMirrorApi.saveProcedure(trainingId, payload);
+  };
+  return <Builder key={trainingId} initialProject={project} onSave={saveProcedure} onToast={onToast} destination={() => '/training'} />;
 }
 
 function Field({ label, required = false, hint, error, children }) {

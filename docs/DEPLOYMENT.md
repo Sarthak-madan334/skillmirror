@@ -23,6 +23,8 @@ This repository can use Vercel for the Vite frontend and Render for the Express 
 
 `VITE_API_BASE_URL` is embedded in the public frontend bundle. Never put credentials or secrets in a `VITE_*` variable. See [Vercel's Vite guide](https://vercel.com/docs/frameworks/frontend/vite) and [environment-variable guide](https://vercel.com/docs/environment-variables).
 
+For the supplied deployment URL, the frontend origin is `https://skillmirror-eight.vercel.app` (without a trailing slash). Set the backend's `FRONTEND_ORIGIN` to that exact origin if this is the Vercel deployment being used. The repository checkout does not establish that the site is connected to a live API; the backend URL and database must be deployed and verified independently. A Vercel environment-variable change applies to a new frontend build, so redeploy after setting `VITE_API_BASE_URL`.
+
 ### Render API and database
 
 1. Create a managed Render PostgreSQL database and a Node.js web service connected to this repository.
